@@ -1,0 +1,1195 @@
+---
+title: "Figures and tables for the main manuscript of 'Dissecting depression symptoms: multi-omics clustering uncovers immune-related subgroups and cell-type specific dysregulation'"
+author: "Jonas Hagenberg et al."
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, include = FALSE}
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(ggpubr)
+library(readxl)
+library(FactoMineR)
+library(factoextra)
+library(ggalluvial)
+library(openxlsx)
+
+source("figures_and_tables/plotting_functions.R")
+source("figures_and_tables/test_functions.R")
+source("figures_and_tables/reporting_functions.R")
+```
+
+# Data 4 cluster solution age/BMI, cytokines, RNAseq
+```{r}
+general_data <- read_in_general_data(proband_type = "current_cases_new_cidi",
+                                     cytokine_version = "additional_correct",
+                                     healthy_control_version = "strict",
+                                     add_lifetime_cases = FALSE)
+
+gsva_go_gene_sets <- GSEABase::getGmt("c5.go.bp.c5.go.mf.v2022.1.Hs.entrez.gmt")
+
+
+define_cluster_colours <- function() {
+  c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+}
+
+set_defaults <- function(
+    compare_means_test = "kruskal.test",
+    add_lifetime_cases = FALSE,
+    add_healthy_controls = TRUE
+) {
+  list(
+    compare_means_test = compare_means_test,
+    add_lifetime_cases = add_lifetime_cases,
+    add_healthy_controls = add_healthy_controls
+  )
+}
+
+# phenotypes, cytokines, RNAseq
+res_sumo_4_pheno_cyt_rna <- read.table("01_res_phenotypes_cytokines_rna_seed_max_iter_10000/k4/clusters.tsv",
+                       header = TRUE)
+res_sumo_4_pheno_cyt_rna$label <- res_sumo_4_pheno_cyt_rna$label + 1
+res_sumo_4_pheno_cyt_rna <- res_sumo_4_pheno_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+
+# geneset data
+gsva_go_uncorrected <- readRDS("gsva_go_uncorrected.rds")
+
+# gene VI data
+important_genes_initial_clustering <- readRDS("phenotypes_cytokines_rna_4_important_genes.rds")
+```
+
+# Data 3 cluster solution age/BMI/celltypes, cytokines, RNAseq
+```{r}
+define_cluster_colours_celltypes_v2 <- function() {
+  c("reMIDS" = "#94d4b1", "reIDS" = "#b3b3b3",
+    "reHIRDS" = "#ffe099")
+}
+
+res_sumo_3_pheno_cell_cyt_rna <- read.table("01_res_phenotypes_celltypes_14_cytokines_rna_seed_max_iter_10000/k3/clusters.tsv",
+                       header = TRUE)
+res_sumo_3_pheno_cell_cyt_rna$label <- res_sumo_3_pheno_cell_cyt_rna$label + 1
+res_sumo_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+```
+
+# Figure 1
+The rest of the figure is designed in Illustrator.
+```{r}
+bmi_figure_1 <- generate_plot(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  compare_means_test = NA,
+  median_BMI_annotation = FALSE,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+  ) +
+  theme_classic() +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none",
+        line = element_line(size = 1)
+        ) +
+  labs(x = NULL, y = NULL)
+
+bmi_figure_1$layers[[1]]$aes_params$size <- 1
+bmi_figure_1$layers[[2]]$aes_params$size <- 1
+bmi_figure_1$layers[[4]]$aes_params$size <- 1
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_1/violinplots_4.pdf",
+       bmi_figure_1,
+       width = 20, height = 20, units = "cm",
+       scale = 1)
+```
+
+# Figure 2
+Needs to be put together via Illustrator.
+```{r}
+heatmap_cases_legend_4_sumo_paper <- generate_plot(
+  type = "heatmap",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  annotation_legend = TRUE,
+  var_name_study_instead_med = TRUE,
+  pretty_names = TRUE,
+  show_psychopharmaca = FALSE,
+  cytokine_version = "additional_unimputed",
+  treeheight_row = 0,
+  included_annotations = c("cluster", "study"),
+  show_cytokine_panel_names = TRUE,
+  sort_by_panel_names = TRUE,
+  fontsize = 24
+)
+```
+```{r}
+ggsave("../../../paper/figures/figure_2/heatmap.pdf",
+       heatmap_cases_legend_4_sumo_paper$gtable,
+       width = 60, height = 40, units = "cm",
+       scale = 1)
+```
+
+```{r}
+variable_importance_4 <- generate_plot(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  omic_type = "cytokines_RNA",
+  rna_version = "standard",
+  cytokine_version = "additional_unimputed",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  show_annotation_string = FALSE,
+  show_gene_id = FALSE
+  ) +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()
+        )
+
+variable_importance_4
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_2/variable_importance_broad.pdf",
+       variable_importance_4,
+       width = 60, height = 30, units = "cm",
+       scale = 1)
+```
+
+Get the legend:
+```{r}
+variable_importance_4_with_legend <- generate_plot(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  omic_type = "cytokines_RNA",
+  rna_version = "standard",
+  cytokine_version = "additional_unimputed",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  show_annotation_string = FALSE,
+  show_gene_id = FALSE,
+  legend_position = "right"
+  ) +
+  theme(text = element_text(size = 36)
+        )
+
+legend_variable_importance_4 <- get_legend(variable_importance_4_with_legend)
+as_ggplot(legend_variable_importance_4)
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_2/variable_importance_legend.pdf",
+       legend_variable_importance_4,
+       width = 50, height = 30, units = "cm",
+       scale = 1)
+```
+
+Get the report to have the names variable importance values:
+```{r}
+values_variable_importance_4 <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  omic_type = "cytokines_RNA",
+  rna_version = "standard",
+  cytokine_version = "additional_unimputed",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE
+)
+
+head(values_variable_importance_4, n = 40)
+```
+
+```{r}
+age_4_v2 <- generate_plot(
+  type = "age",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+  ) +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+
+age_4_v2
+```
+
+```{r}
+bmi_4_v2 <- generate_plot(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  compare_means_test = NA,
+  median_BMI_annotation = FALSE,
+  use_unimputed_data = TRUE,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+  ) +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+
+bmi_4_v2
+```
+
+Combine age & BMI:
+```{r}
+age_bmi_4_v2 <- ggarrange(
+  age_4_v2,
+  bmi_4_v2,
+  ncol = 3,
+  legend = "none"
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_2/age_bmi_broad_unimputed_v2.pdf",
+       age_bmi_4_v2,
+       width = 60, height = 30, units = "cm",
+       scale = 1)
+```
+
+Calculate the mean BMI values per group:
+```{r}
+general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  group_by(cluster) %>% 
+  summarise(mean_BMI = mean(BMI, na.rm = TRUE),
+            median_BMI = median(BMI, na.rm = TRUE))
+```
+
+# Figure 3
+Needs to be put together via Illustrator.
+```{r}
+rel_bmi_crp <- general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  mutate(cluster = case_when(
+    cluster == 1 ~ "MIDS",
+    cluster == 2 ~ "HIRDS1",
+    cluster == 3 ~ "LIRDS",
+    cluster == 4 ~ "HIRDS2"
+  )) %>% 
+  ggplot() +
+  aes(x = BMI, y = hsCRP, col = cluster) +
+  geom_point() +
+  geom_smooth(size = 2) +
+  theme_bw() +
+  scale_colour_manual(values = define_cluster_colours()) +
+  theme(
+    text = element_text(size = 36)
+  ) +
+  coord_cartesian(ylim = c(-3, 4))
+
+rel_age_crp <- general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  mutate(cluster = case_when(
+    cluster == 1 ~ "MIDS",
+    cluster == 2 ~ "HIRDS1",
+    cluster == 3 ~ "LIRDS",
+    cluster == 4 ~ "HIRDS2"
+  )) %>% 
+  ggplot() +
+  aes(x = age, y = hsCRP, col = cluster) +
+  geom_point() +
+  geom_smooth(size = 2) +
+  theme_bw() +
+  scale_colour_manual(values = define_cluster_colours()) +
+  theme(
+    text = element_text(size = 36)
+  ) +
+  coord_cartesian(ylim = c(-3, 4))
+
+rel_age_bmi <- general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  mutate(cluster = case_when(
+    cluster == 1 ~ "MIDS",
+    cluster == 2 ~ "HIRDS1",
+    cluster == 3 ~ "LIRDS",
+    cluster == 4 ~ "HIRDS2"
+  )) %>% 
+  ggplot() +
+  aes(x = age, y = BMI, col = cluster) +
+  geom_point() +
+  geom_smooth(size = 2) +
+  theme_bw() +
+  scale_colour_manual(values = define_cluster_colours()) +
+  theme(
+    text = element_text(size = 36)
+  )
+
+rel_bmi_crp_age <- ggarrange(
+  rel_bmi_crp,
+  rel_age_crp,
+  rel_age_bmi,
+  nrow = 1,
+  common.legend = TRUE,
+  legend = "bottom",
+  labels = "AUTO",
+  font.label = list(size = 36))
+```
+
+```{r}
+bdi_4 <- generate_plot(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  compare_means_test = NA,
+  x_axis_legend = element_blank()
+  ) +
+  theme(
+    text = element_text(size = 36),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+
+bdi_4
+```
+
+```{r}
+pretty_cluster_assignments_v2 <- get_cluster_assignments(
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  general_data = general_data,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  )
+)
+pretty_cluster_assignments_v2 <- pretty_cluster_assignments_v2[["cluster_assignments_df"]]
+```
+
+
+```{r}
+sdnn_median_4 <- general_data$ecg %>% 
+  left_join(pretty_cluster_assignments_v2, by = "ID") %>% 
+  filter(!is.na(cluster)) %>% 
+  ggplot(aes(x = cluster, y = SDNN)) +
+  geom_violin(aes(fill = cluster)) +
+  geom_boxplot(aes(group = cluster), width = 0.2) +
+  theme_bw() +
+  scale_fill_manual(values = c(define_cluster_colours(), "controls" = "#FFFFFF")) +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()
+  )
+
+sdnn_median_4 <- add_dashes(sdnn_median_4, general_data$ecg %>% 
+  left_join(pretty_cluster_assignments, by = "ID") %>% 
+    filter(!is.na(cluster)))
+sdnn_median_4
+```
+
+```{r}
+lateral_ventricle_4_v1 <- generate_plot(
+  type = "imaging_residuals",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  compare_means_test = NA,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b"),
+  remove_controls = TRUE,
+  show_n = FALSE
+  ) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none"
+        )
+
+lateral_ventricle_4_v2 <- lateral_ventricle_4_v1 +
+  theme(text = element_text(size = 36))
+```
+
+
+Bring everything together:
+```{r}
+bdi_ecg_imaging_4 <- ggarrange(
+  bdi_4,
+  sdnn_median_4,
+  lateral_ventricle_4_v2,
+  nrow = 1,
+  legend = "none",
+  labels = c("D", "E", "F"),
+  font.label = list(size = 36))
+
+figure_3_v3 <- ggarrange(
+  rel_bmi_crp_age,
+  bdi_ecg_imaging_4,
+  nrow = 2
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_3/figure_3_v3.pdf",
+       figure_3_v3,
+       width = 70, height = 60, units = "cm",
+       scale = 1)
+```
+
+Calculate the Pearson correlation within the groups for the different analyses:
+```{r}
+general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  group_by(cluster) %>% 
+  summarise(corr = cor(BMI, hsCRP, use = "pairwise.complete.obs", method = "pearson"),
+            p_value = cor.test(BMI, hsCRP, use = "pairwise.complete.obs", method = "pearson")$p.value)
+```
+
+```{r}
+general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  group_by(cluster) %>% 
+  summarise(corr = cor(age, hsCRP, use = "pairwise.complete.obs", method = "pearson"),
+            p_value = cor.test(age, hsCRP, use = "pairwise.complete.obs", method = "pearson")$p.value)
+```
+
+```{r}
+general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID") %>% 
+  group_by(cluster) %>% 
+  summarise(corr = cor(age, BMI, use = "pairwise.complete.obs", method = "pearson"),
+            p_value = cor.test(age, BMI, use = "pairwise.complete.obs", method = "pearson")$p.value)
+```
+
+# Figure 4
+Needs to be put together via Illustrator.
+```{r}
+cytokine_boxplots_4 <- generate_plot(
+  type = "cytokines",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_list = c("IL_1RA", "hsCRP", "PlGF", "MCP_1", "TNF_alpha",
+                    "MIP_1beta", "MCP_4"),
+  violin = TRUE,
+  complete_names = FALSE,
+  cytokine_version = "additional_unimputed",
+  sort_by_list = TRUE,
+  pretty_names = TRUE,
+  ncol = 4
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    text = element_text(size = 36),
+    axis.title.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  ylab("normalised concentration")
+
+cytokine_boxplots_4
+```
+
+```{r}
+genes_boxplot_4 <- generate_plot(
+    type = "RNA",
+    general_data = general_data,
+    cluster_assignments = res_sumo_4_pheno_cyt_rna,
+    rna_type = "standard",
+    gene_list = c("ENSG00000091129", "ENSG00000186462", "ENSG00000163520",
+                  "ENSG00000155893", "ENSG00000172985", "ENSG00000158813",
+                  "ENSG00000182489"),
+    compare_means_test = NA,
+    sort_by_list = TRUE,
+    ncol = 4,
+    facet_scale = "fixed",
+    show_gene_id = FALSE
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 36),
+    axis.title.x = element_blank()
+  )
+
+genes_boxplot_4
+```
+
+```{r}
+cytokine_rna_boxplots_4 <- ggarrange(
+  cytokine_boxplots_4,
+  genes_boxplot_4,
+  ncol = 1,
+  common.legend = TRUE,
+  legend = "none")
+
+cytokine_rna_boxplots_4
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_4/boxplots_cytokines_genes_4.pdf",
+       cytokine_rna_boxplots_4,
+       width = 35, height = 70, units = "cm",
+       scale = 1)
+```
+
+Create a heatmap of the top genesets:
+
+```{r}
+gsva_go_clean_uncorrected <- as.data.frame(t(gsva_go_uncorrected))
+gsva_go_clean_uncorrected$ID <- rownames(gsva_go_clean_uncorrected)
+rownames(gsva_go_clean_uncorrected) <- NULL
+
+geneset_importance_go_uncorrected <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  omic_type = "genesets",
+  geneset_results = gsva_go_clean_uncorrected,
+  include_p_value = TRUE
+)
+
+geneset_heatmap_go_uncorrected <- generate_plot(
+  type = "heatmap_genesets",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  scale_expression = TRUE,
+  # colour_palette = colorRampPalette(c("blue", "yellow"))(100),
+  colour_palette = viridis::viridis(100),
+  treeheight_row = 0,
+  show_current_depression = FALSE,
+  show_sex = FALSE,
+  show_age = FALSE,
+  show_crp = FALSE,
+  show_psychopharmaca = FALSE,
+  show_medication = FALSE,
+  geneset_data = gsva_go_clean_uncorrected,
+  geneset_list = geneset_importance_go_uncorrected %>% dplyr::slice(1:20) %>% pull(geneset),
+  cluster_rows = FALSE,
+  fontsize = 24
+)
+```
+```{r}
+ggsave("../../../paper/figures/figure_4/geneset_heatmap.pdf",
+       geneset_heatmap_go_uncorrected,
+       width = 60, height = 50, units = "cm",
+       scale = 1)
+```
+
+```{r}
+geneset_importance_go_uncorrected
+```
+
+Determine the number of genes in the gene sets:
+```{r}
+gsva_input_data_uncorrected <- general_data$rna %>% 
+  dplyr::rename(ensembl_id = gene) %>% 
+  left_join(mapping_info %>% dplyr::select(entrez_id, ensembl_gene_id),
+          by = c("ensembl_id" = "ensembl_gene_id")) %>% 
+  filter(!is.na(expression), !is.na(entrez_id)) %>% 
+  dplyr::select(-c(ensembl_id)) %>% 
+  pivot_wider(
+    id_cols = entrez_id,
+    names_from = ID,
+    values_from = expression
+  )
+
+gene_names_uncorrected <- gsva_input_data_uncorrected$entrez_id
+gsva_input_data_uncorrected <- as.matrix(gsva_input_data_uncorrected %>% dplyr::select(-entrez_id))
+rownames(gsva_input_data_uncorrected) <- gene_names_uncorrected
+```
+
+```{r}
+gene_sets_of_interest <- c(
+  "GOBP_ANTEROGRADE_AXONAL_TRANSPORT",
+  "GOBP_REGULATION_OF_MACROPHAGE_ACTIVATION",
+  "GOBP_RESPONSE_TO_MINERALOCORTICOID",
+  "GOBP_REGULATION_OF_CALCIUM_ION_TRANSMEMBRANE_TRANSPORTER_ACTIVITY",
+  "GOBP_RESPONSE_TO_MOLECULE_OF_BACTERIAL_ORIGIN",
+  "GOBP_REGULATION_OF_SECRETION",
+  "GOBP_POSITIVE_REGULATION_OF_TRANSMEMBRANE_TRANSPORT",
+  "GOBP_POSITIVE_REGULATION_OF_NEURON_DEATH"
+)
+genes_in_gene_set <- lapply(gene_sets_of_interest, function(one_set) {
+  GSEABase::geneIds(gsva_go_gene_sets[one_set])
+})
+
+genes_intersected_with_data_set <- lapply(genes_in_gene_set, function(one_set) {
+  set_data <- data.frame(one_set)
+  colnames(set_data) <- "gene"
+  genes_in_data_set <- data.frame(gene = dimnames(gsva_input_data_uncorrected)[[1]])
+  res <- set_data %>% 
+    inner_join(genes_in_data_set, by = "gene") %>% 
+    nrow()
+  names(res) <- names(one_set)
+  res
+})
+```
+
+Gene correlations
+```{r}
+genes_correlation_4 <- generate_plot(
+  type = "RNA_correlation",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  rna_type = "standard",
+  gene_list = c("ENSG00000091129", "ENSG00000186462", "ENSG00000163520",
+                "ENSG00000155893", "ENSG00000172985", "ENSG00000158813",
+                "ENSG00000182489"),
+  tl.cex = NULL,
+  sample_type = "cases"
+) +
+  viridis::scale_fill_viridis(name = "Corr", limits = c(-0.45, 0.65),
+                              option = "magma") +
+  theme(
+    text = element_text(size = 36),
+    legend.key.width = unit(4.5, "lines")
+  )
+
+genes_correlation_4  
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_4/correlation_genes_4.pdf",
+       genes_correlation_4  ,
+       width = 20, height = 20, units = "cm",
+       scale = 1)
+```
+
+```{r}
+cytokines_correlation_4 <- generate_plot(
+  type = "cytokine_correlation",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_version = "additional_unimputed",
+  cytokine_list = c("IL_1RA", "hsCRP", "PlGF", "MCP_1", "TNF_alpha",
+                    "MIP_1beta", "MCP_4"),
+  tl.cex = NULL,
+  pretty_names = TRUE,
+  sample_type = "cases"
+) +
+  viridis::scale_fill_viridis(name = "Corr", limits = c(-0.45, 0.65),
+                              option = "magma") +
+  theme(
+    text = element_text(size = 36),
+    legend.key.width = unit(4.5, "lines")
+  )
+
+cytokines_correlation_4  
+```
+
+Combine the correlation plots
+```{r}
+correlation_plots_4 <- ggarrange(
+  genes_correlation_4,
+  cytokines_correlation_4,
+  ncol = 2,
+  common.legend = TRUE,
+  legend = "bottom"
+)
+
+correlation_plots_4
+```
+```{r}
+ggsave("../../../paper/figures/figure_4/correlation_genes_cytokines_4.pdf",
+       correlation_plots_4  ,
+       width = 40, height = 20, units = "cm",
+       scale = 1)
+```
+
+Give the values of correlation:
+```{r}
+cyt_corr <- calculate_cytokine_correlation(
+  data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_version = "additional_unimputed",
+  sample_type = "cases",
+  pretty_names = TRUE,
+  cytokine_list = c("IL_1RA", "hsCRP", "PlGF", "MCP_1", "TNF_alpha",
+                    "MIP_1beta", "MCP_4")
+)
+
+cyt_corr
+```
+
+```{r}
+rna_corr <- calculate_RNA_correlation(
+  data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  rna_type = "standard",
+  gene_list = c("ENSG00000091129", "ENSG00000186462", "ENSG00000163520",
+                "ENSG00000155893", "ENSG00000172985", "ENSG00000158813",
+                "ENSG00000182489"),
+  sample_type = "cases"
+)
+
+rna_corr
+```
+
+Calculate mean absolute correlations:
+```{r}
+mean_cyt_corr <- lapply(seq_len(ncol(cyt_corr)), function(col) {
+  # the matrix is symmetric, so I can use the col value to exclude the row
+  # where the correlation with itself is stored
+  res <- mean(abs(cyt_corr[-col, col]))
+  names(res) <- dimnames(cyt_corr)[[2]][col]
+  res
+})
+unlist(mean_cyt_corr)
+mean(unlist(mean_cyt_corr))
+
+mean_rna_corr <- lapply(seq_len(ncol(rna_corr)), function(col) {
+  # the matrix is symmetric, so I can use the col value to exclude the row
+  # where the correlation with itself is stored
+  res <- mean(abs(rna_corr[-col, col]))
+  names(res) <- dimnames(rna_corr)[[2]][col]
+  res
+})
+unlist(mean_rna_corr)
+mean(unlist(mean_rna_corr))
+```
+
+
+# Figure 5
+Alluvial plot between clusters:
+```{r}
+cluster_colours_celltypes_alluvial_v2 <- c(
+  "MIDS" = "#3fd482",
+  "HIRDS1" = "#ffca4d",
+  "LIRDS" = "#6857d9",
+  "HIRDS2" = "#fa5c4b",
+  "reMIDS" = "#94d4b1",
+  "reIDS" = "#b3b3b3",
+  "reHIRDS" = "#ffe099"
+  )
+
+# prepare the data
+data_alluvial_celltypes_v2 <- res_sumo_4_pheno_cyt_rna %>% 
+  left_join(data.frame(
+    cluster = 1:4,
+    initial_clustering = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ), by = "cluster") %>% 
+  select(-cluster, `initial clustering` = initial_clustering) %>% 
+  left_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>% 
+  # rename(`including celltypes` = cluster) %>% 
+  left_join(data.frame(
+            cluster = 1:3,
+            including_celltypes = c( "reMIDS", "reIDS", "reHIRDS")),
+            by = "cluster") %>% 
+  rename(`including celltypes` = including_celltypes) %>% 
+  select(-cluster) %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "clustering",
+    values_to = "cluster assignment"
+  ) %>% 
+  mutate(
+    clustering = factor(clustering, levels = c("initial clustering",
+                                               "including celltypes")),
+    `cluster assignment` = factor(`cluster assignment`,
+                                  levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2",
+                                             "reMIDS", "reIDS", "reHIRDS"))
+    )
+
+plot_alluvial_uncorrected_celltypes_v2 <- data_alluvial_celltypes_v2 %>% 
+  ggplot() +
+  aes(
+    x = clustering,
+    stratum = `cluster assignment`,
+    alluvium = ID,
+    fill = `cluster assignment`
+  ) +
+  geom_flow(stat = "alluvium", lode.guidance = "frontback") +
+  geom_stratum() +
+  geom_label(stat = "stratum",
+             aes(label = after_stat(stratum)),
+             fill = "white",
+             # the theme size is in pt, the geom_label size is in mm
+             size = 36 * 0.36) +
+  scale_fill_manual(values = cluster_colours_celltypes_alluvial_v2) +
+  scale_x_discrete(expand = c(0.1, 0.2)) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    text = element_text(size = 36),
+    axis.title.x = element_blank()
+  )
+
+plot_alluvial_uncorrected_celltypes_v2
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_5/alluvial_cluster_assignment_v2.pdf",
+       plot_alluvial_uncorrected_celltypes_v2,
+       width = 25, height = 30, units = "cm",
+       scale = 1)
+```
+
+Calculate the percentages of old cluster assignments in new clusters:
+```{r}
+group_size_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>% 
+  group_by(cluster) %>% 
+  summarise(group_size = n())
+
+res_sumo_4_pheno_cyt_rna %>% 
+  rename(`uncorrected clustering` = cluster) %>% 
+  left_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>%
+  group_by(cluster, `uncorrected clustering`) %>% 
+  summarise(n = n()) %>% 
+  left_join(group_size_3_pheno_cell_cyt_rna, by = "cluster") %>%
+  mutate(fraction = n / group_size)
+```
+
+Variable importance plot:
+```{r}
+variable_importance_3_celltypes <- generate_plot(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  omic_type = "cytokines_RNA",
+  rna_version = "standard",
+  cytokine_version = "additional_unimputed",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  include_celltypes = TRUE,
+  force_cytokines_in_plot = TRUE,
+  show_annotation_string = FALSE,
+  show_gene_id = FALSE
+  ) +
+  theme(text = element_text(size = 36),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()
+        )
+
+variable_importance_3_celltypes
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_5/variable_importance.pdf",
+       variable_importance_3_celltypes,
+       width = 50, height = 30, units = "cm",
+       scale = 1)
+```
+
+Get the report to have the names variable importance values:
+```{r}
+values_variable_importance_3_celltypes <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  omic_type = "cytokines_RNA",
+  rna_version = "standard",
+  cytokine_version = "additional_unimputed",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  include_celltypes = TRUE
+)
+
+values_variable_importance_3_celltypes %>% 
+  filter(variable %in% c("age", "BMI", "hsCRP", "IP_10",
+                         "T cells CD4 memory resting",
+                         "Dendritic cells activated",
+                         "Monocytes",
+                         "ZEB2 ENSG00000169554",
+                         "LINC01550 ENSG00000246223"))
+```
+
+Distribution of celltypes:
+```{r}
+boxplot_celltypes_3_v2 <- generate_plot(
+  type = "celltypes",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  celltype_type = "RNA_updated_14",
+  cluster_colours = define_cluster_colours_celltypes_v2(),
+  cluster_names = data.frame(
+    cluster = 1:3,
+    cluster_new = c("reMIDS", "reIDS", "reHIRDS")
+  ),
+  compare_means_test = NA
+  ) +
+  ylab("fraction") +
+  theme(
+    text = element_text(size = 36),
+    legend.position = "none",
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+boxplot_celltypes_3_v2
+```
+```{r}
+ggsave("../../../paper/figures/figure_5/celltypes_distribution_v2.pdf",
+       boxplot_celltypes_3_v2,
+       width = 50, height = 30, units = "cm",
+       scale = 1)
+```
+
+Calculate the mean values across groups:
+```{r}
+general_data$celltype_data_rna_updated_14 %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "celltype",
+    values_to = "percentage"
+  ) %>% 
+  right_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>% 
+  group_by(celltype, cluster) %>% 
+  summarise(mean_fraction = mean(percentage))
+```
+
+
+Percentages of different cell types (total):
+```{r}
+celltypes_total <- general_data$celltype_data_rna_updated_14 %>% 
+  right_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>% 
+  summarise(across(`B cells memory`:`T cells gamma delta`, median, na.rm = TRUE)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "celltype",
+    values_to = "fraction"
+  ) %>% 
+  dplyr::mutate(fraction = fraction / 100) %>% 
+  ggplot() +
+  aes(
+    x = 1,
+    y = fraction,
+    fill = celltype
+    ) +
+  geom_col() +
+  theme_bw() +
+  scale_fill_manual(values = c("#5F4690","#1D6996","#38A6A5","#0F8554","#73AF48","#EDAD08","#E17C05","#CC503E", "#cc3d59", "#94346E","#6F4070","#994E95","#666666", "#000000")) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    text = element_text(size = 36)
+  )
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_5/celltypes_total.pdf",
+       celltypes_total,
+       width = 30, height = 30, units = "cm",
+       scale = 1)
+```
+
+```{r}
+general_data$celltype_data_rna_updated_14 %>% 
+  right_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>% 
+  summarise(across(`B cells memory`:`T cells gamma delta`, median, na.rm = TRUE)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "celltype",
+    values_to = "fraction"
+  ) %>% 
+  dplyr::mutate(fraction = fraction / 100) %>% 
+  arrange(desc(fraction))
+```
+
+
+Geneset enrichment plot:
+```{r}
+geneset_heatmap_go_uncorrected_celltypes_v2 <- generate_plot(
+  type = "heatmap_genesets",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  scale_expression = TRUE,
+  colour_palette = viridis::viridis(100),
+  cluster_colours = define_cluster_colours_celltypes_v2(),
+  cluster_names = data.frame(
+    cluster = 1:3,
+    cluster_new = c("reMIDS", "reIDS", "reHIRDS")
+  ),
+  treeheight_row = 0,
+  show_current_depression = FALSE,
+  show_sex = FALSE,
+  show_age = FALSE,
+  show_crp = FALSE,
+  show_psychopharmaca = FALSE,
+  show_medication = FALSE,
+  geneset_data = gsva_go_clean_uncorrected,
+  geneset_list = geneset_importance_go_uncorrected_celltypes %>% dplyr::slice(1:20) %>% pull(geneset),
+  cluster_rows = FALSE,
+  fontsize = 24
+)
+```
+```{r}
+ggsave("../../../paper/figures/figure_5/geneset_heatmap_v2.pdf",
+       geneset_heatmap_go_uncorrected_celltypes_v2,
+       width = 60, height = 50, units = "cm",
+       scale = 1)
+```
+
+```{r}
+geneset_importance_go_uncorrected_celltypes
+```
+
+# Figure 6
+```{r}
+vegfa_boxplot_4 <- generate_plot(
+  type = "cytokines",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_list = c("VEGF_A_HS"),
+  violin = TRUE,
+  complete_names = FALSE,
+  cytokine_version = "additional_unimputed",
+  sort_by_list = TRUE,
+  pretty_names = TRUE,
+  ncol = 4
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 36),
+    axis.title.x = element_blank()
+  ) +
+  ylab("normalised concentration")
+
+vegfa_boxplot_4
+```
+```{r}
+serpinf1_boxplot_4 <- generate_plot(
+    type = "RNA",
+    general_data = general_data,
+    cluster_assignments = res_sumo_4_pheno_cyt_rna,
+    rna_type = "standard",
+    gene_list = c("ENSG00000132386"),
+    compare_means_test = NA,
+    sort_by_list = TRUE,
+    ncol = 4,
+    facet_scale = "fixed",
+    show_gene_id = FALSE
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 36),
+    axis.title.x = element_blank()
+  )
+
+serpinf1_boxplot_4
+```
+
+```{r}
+vegfa_rna_boxplot_4 <- generate_plot(
+    type = "RNA",
+    general_data = general_data,
+    cluster_assignments = res_sumo_4_pheno_cyt_rna,
+    rna_type = "standard",
+    gene_list = c("ENSG00000112715"),
+    compare_means_test = NA,
+    sort_by_list = TRUE,
+    ncol = 4,
+    facet_scale = "fixed",
+    show_gene_id = FALSE
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 36),
+    axis.title.x = element_blank()
+  )
+
+vegfa_rna_boxplot_4
+```
+
+
+```{r}
+serpinf1_vegfa_vegfa_rna <- ggarrange(
+  serpinf1_boxplot_4,
+  vegfa_boxplot_4,
+  vegfa_rna_boxplot_4,
+  nrow = 1,
+  common.legend = TRUE,
+  legend = "bottom",
+  labels = NULL,
+  font.label = list(size = 36))
+
+serpinf1_vegfa_vegfa_rna
+```
+
+```{r}
+ggsave("../../../paper/figures/figure_6/serpinf1_vegfa_rna_boxplots.pdf",
+       serpinf1_vegfa_vegfa_rna,
+       width = 75, height = 30, units = "cm",
+       scale = 1)
+```
+
+The UMAPs were generated in python, see the file `01_b_single_cell_figure_6.ipynb`.
+
+# Table 1
+Generate a table with information about age, sex, BMI, BDI, MDD/dysthymia
+diagnosis, medication.
+
+```{r}
+id_data_with_status <- bind_rows(
+  res_sumo_4_pheno_cyt_rna %>% select(ID) %>% mutate(status = "case"),
+  general_data$control_ids %>% mutate(status = "control")
+)
+
+bmi_data <- general_data$cytokine_uncorrected %>% 
+  select(ID, BMI)
+
+sex_data <- general_data$imputed_data %>% 
+  filter(.imp == 1) %>% 
+  select(ID, sex)
+
+mdd_diagnosis <- general_data$cidi_single %>% 
+  mutate(has_depression_dysthymia = Depression_full_curr == 1 |
+             Dysthymia_full_curr == 1 | Depression_subthr_curr == 1) %>% 
+  select(ID, has_depression_dysthymia)
+
+# get all the data together
+data_sample_table <- general_data$age %>% 
+  right_join(id_data_with_status, by = "ID") %>% 
+  left_join(general_data$bdi_sumscores %>% select(ID, BDI_total), by = "ID") %>% 
+  left_join(bmi_data, by = "ID") %>% 
+  left_join(sex_data, by = "ID") %>% 
+  left_join(mdd_diagnosis, by = "ID") %>% 
+  mutate(has_depression_dysthymia = if_else(status == "control", FALSE, has_depression_dysthymia)) %>% 
+  left_join(general_data$medication_data, by = "ID")
+```
+
+```{r}
+data_sample_table_summary <- data_sample_table %>% 
+  group_by(status) %>% 
+  summarise(n = n(),
+            across(c(age, BMI, BDI_total), .fns = list(mean = mean, sd = sd)),
+            across(c(has_depression_dysthymia, t0_any_psych_medication),
+                   .fns = list(fraction = ~sum(.x, na.rm = TRUE) / n(), n = ~sum(.x, na.rm = TRUE))),
+            female_fraction = sum(sex == "female") / n(), female_n = sum(sex == "female")) %>% 
+  mutate(age = paste0(round(age_mean, 1), " (", round(age_sd, 1), ")"),
+         female = paste0(round(female_fraction * 100, 0), "% (", female_n, ")"),
+         BMI = paste0(round(BMI_mean, 1), " (", round(BMI_sd, 1), ")"),
+         `MDD or dysthymia diagnosis` = paste0(round(has_depression_dysthymia_fraction * 100, 0), "% (", has_depression_dysthymia_n, ")"),
+         BDI = paste0(round(BDI_total_mean, 1), " (", round(BDI_total_sd, 1), ")"),
+         `psychotropic drugs` = paste0(round(t0_any_psych_medication_fraction * 100, 0), "% (", t0_any_psych_medication_n, ")")) %>% 
+  select(status, n, age, female, BMI, `MDD or dysthymia diagnosis`, BDI, `psychotropic drugs`)
+
+data_sample_table_summary
+```
+
+Paste the following into Excel and then into the document as table:
+```{r}
+clipr::write_clip(data_sample_table_summary)
+```
+

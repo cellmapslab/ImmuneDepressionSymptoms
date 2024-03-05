@@ -1,0 +1,263 @@
+---
+title: "Statistical tests for 'Dissecting depression symptoms: multi-omics clustering uncovers immune-related subgroups and cell-type specific dysregulation'"
+author: "Jonas Hagenberg et al."
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, include = FALSE}
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+source("figures_and_tables/plotting_functions.R")
+source("figures_and_tables/test_functions.R")
+```
+
+# Data
+## Initial clustering
+```{r}
+general_data <- read_in_general_data(proband_type = "current_cases_new_cidi",
+                                     cytokine_version = "additional_correct",
+                                     healthy_control_version = "strict",
+                                     add_lifetime_cases = FALSE)
+
+set_defaults <- function(
+    compare_means_test = "kruskal.test",
+    add_lifetime_cases = FALSE,
+    add_healthy_controls = TRUE
+) {
+  list(
+    compare_means_test = compare_means_test,
+    add_lifetime_cases = add_lifetime_cases,
+    add_healthy_controls = add_healthy_controls
+  )
+}
+
+# phenotypes, cytokines, RNAseq
+res_sumo_4_pheno_cyt_rna <- read.table("01_res_phenotypes_cytokines_rna_seed_max_iter_10000/k4/clusters.tsv",
+                       header = TRUE)
+res_sumo_4_pheno_cyt_rna$label <- res_sumo_4_pheno_cyt_rna$label + 1
+res_sumo_4_pheno_cyt_rna <- res_sumo_4_pheno_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+```
+
+## Clustering corrected for age/sex/BMI
+```{r}
+res_sumo_3_cyt_rna_cov <- read.table("04_cytokines_rna_corrected_covariates/01_res_cytokines_rna_corrected_covariates_1_seed_max_iter_10000/k3/clusters.tsv",
+                       header = TRUE)
+res_sumo_3_cyt_rna_cov$label <- res_sumo_3_cyt_rna_cov$label + 1
+res_sumo_3_cyt_rna_cov <- res_sumo_3_cyt_rna_cov %>% 
+  rename(ID = sample, cluster = label)
+```
+
+## Reclustering with celltypes
+```{r}
+res_sumo_3_pheno_cell_cyt_rna <- read.table("01_res_phenotypes_celltypes_14_cytokines_rna_seed_max_iter_10000/k3/clusters.tsv",
+                       header = TRUE)
+res_sumo_3_pheno_cell_cyt_rna$label <- res_sumo_3_pheno_cell_cyt_rna$label + 1
+res_sumo_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+```
+
+# Statistics
+Test the distribution of several phenotypes across the clusters.
+
+## Initial clustering
+BDI/MADRS
+```{r}
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  method = "Tukey"
+)
+```
+
+```{r}
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  method = "Tukey"
+)
+```
+
+```{r}
+generate_test(
+  type = "BDI_single",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna
+)
+```
+
+CIDI diagnoses:
+```{r}
+generate_test(
+  type = "cidi_diagnosis",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna
+)
+```
+
+```{r}
+generate_test(
+  type = "cidi_depression_dysthymia",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna
+)
+```
+
+Correlation of CRP, age and BMI
+```{r}
+data_correlation_initial_clustering <- general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna, by = "ID")
+
+# BMI & CRP
+data_correlation_initial_clustering %>% 
+  group_by(cluster) %>% 
+  summarise(
+    cor = cor.test(BMI, hsCRP, use = "complete.obs")$estimate,
+    p.value = cor.test(BMI, hsCRP, use = "complete.obs")$p.value
+  )
+
+# age & CRP
+data_correlation_initial_clustering %>% 
+  group_by(cluster) %>% 
+  summarise(
+    cor = cor.test(age, hsCRP, use = "complete.obs")$estimate,
+    p.value = cor.test(age, hsCRP, use = "complete.obs")$p.value
+  )
+
+# age & BMI
+data_correlation_initial_clustering %>% 
+  group_by(cluster) %>% 
+  summarise(
+    cor = cor.test(age, BMI, use = "complete.obs")$estimate,
+    p.value = cor.test(age, BMI, use = "complete.obs")$p.value
+  )
+```
+
+Distribution of Become and Optima cohorts across clusters
+```{r}
+data_studies_initial_clustering <- res_sumo_4_pheno_cyt_rna %>% 
+  mutate(
+    study = if_else(str_detect(ID, "^F"), "Become", "Optima")
+  )
+
+fisher.test(
+  x = data_studies_initial_clustering$cluster,
+  y = data_studies_initial_clustering$study
+)
+```
+Exclude the MIDS cluster:
+```{r}
+data_studies_initial_clustering_wo_mids <- res_sumo_4_pheno_cyt_rna %>% 
+  mutate(
+    study = if_else(str_detect(ID, "^F"), "Become", "Optima")
+  ) %>% 
+  filter(cluster != 1)
+
+fisher.test(
+  x = data_studies_initial_clustering_wo_mids$cluster,
+  y = data_studies_initial_clustering_wo_mids$study
+)
+```
+
+ECG
+```{r}
+generate_test(
+  type = "ECG",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  # with_exclusions means that the participants with low quality data were excluded
+  QC_filtering = "with_exclusions"
+)
+```
+
+Imaging
+```{r}
+test_imaging_thickness_ancova <- generate_test(
+  type = "imaging_ancova",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  variable_type = "thickness_revised",
+  model_type = "without_age2"
+)
+
+test_imaging_volume_ancova <- generate_test(
+  type = "imaging_ancova",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  variable_type = "volumina",
+  model_type = "without_age2"
+)
+
+results_4_cluster_final_version <- bind_rows(
+  test_imaging_thickness_ancova,
+  test_imaging_volume_ancova %>% filter(variable %in% c("LatVent", "hippo"))
+) %>% 
+  filter(str_detect(term, "^cluster")) %>% 
+  mutate(
+    p_value_adjusted = p.adjust(p.value, method = "BH")
+  )
+```
+
+## Clustering corrected for age/sex/BMI
+```{r}
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey"
+)
+```
+```{r}
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey"
+)
+```
+
+```{r}
+generate_test(
+  type = "age",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey"
+)
+```
+
+```{r}
+generate_test(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey",
+  bmi_source = "with_missing"
+)
+```
+
+## Reclustering with cell types
+```{r}
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  method = "Tukey"
+)
+```
+```{r}
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  method = "Tukey"
+)
+```

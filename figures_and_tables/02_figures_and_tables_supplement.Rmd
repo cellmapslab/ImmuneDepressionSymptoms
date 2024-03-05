@@ -1,0 +1,1269 @@
+---
+title: "Figures and tables for the supplement of 'Dissecting depression symptoms: multi-omics clustering uncovers immune-related subgroups and cell-type specific dysregulation'"
+author: "Jonas Hagenberg et al."
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, include = FALSE}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(ggpubr)
+library(readxl)
+library(ggalluvial)
+library(openxlsx)
+
+source("figures_and_tables/plotting_functions.R")
+source("figures_and_tables/test_functions.R")
+source("figures_and_tables/reporting_functions.R")
+```
+
+# Data
+## Initial clustering
+```{r}
+general_data <- read_in_general_data(proband_type = "current_cases_new_cidi",
+                                     cytokine_version = "additional_correct",
+                                     healthy_control_version = "strict",
+                                     add_lifetime_cases = FALSE)
+
+gsva_go_gene_sets <- GSEABase::getGmt("c5.go.bp.c5.go.mf.v2022.1.Hs.entrez.gmt")
+
+set_defaults <- function(
+    compare_means_test = "kruskal.test",
+    add_lifetime_cases = FALSE,
+    add_healthy_controls = TRUE
+) {
+  list(
+    compare_means_test = compare_means_test,
+    add_lifetime_cases = add_lifetime_cases,
+    add_healthy_controls = add_healthy_controls
+  )
+}
+
+# phenotypes, cytokines, RNAseq
+res_sumo_4_pheno_cyt_rna <- read.table("01_res_phenotypes_cytokines_rna_seed_max_iter_10000/k4/clusters.tsv",
+                       header = TRUE)
+res_sumo_4_pheno_cyt_rna$label <- res_sumo_4_pheno_cyt_rna$label + 1
+res_sumo_4_pheno_cyt_rna <- res_sumo_4_pheno_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+
+# geneset data
+gsva_go_uncorrected <- readRDS("gsva_go_uncorrected.rds")
+
+# gene VI data
+important_genes_initial_clustering <- readRDS("phenotypes_cytokines_rna_4_important_genes.rds")
+
+# imaging data
+results_4_cluster_final_version <- readRDS("imaging_paper_pheno_cyt_rna_4_cluster.rds")
+```
+
+## Clustering corrected for age/sex/BMI
+```{r}
+res_sumo_3_cyt_rna_cov <- read.table("04_cytokines_rna_corrected_covariates/01_res_cytokines_rna_corrected_covariates_1_seed_max_iter_10000/k3/clusters.tsv",
+                       header = TRUE)
+res_sumo_3_cyt_rna_cov$label <- res_sumo_3_cyt_rna_cov$label + 1
+res_sumo_3_cyt_rna_cov <- res_sumo_3_cyt_rna_cov %>% 
+  rename(ID = sample, cluster = label)
+```
+
+## Reclustering with celltypes
+```{r}
+res_sumo_3_pheno_cell_cyt_rna <- read.table("01_res_phenotypes_celltypes_14_cytokines_rna_seed_max_iter_10000/k3/clusters.tsv",
+                       header = TRUE)
+res_sumo_3_pheno_cell_cyt_rna$label <- res_sumo_3_pheno_cell_cyt_rna$label + 1
+res_sumo_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>% 
+  rename(ID = sample, cluster = label)
+```
+
+## Immune marker RNA-seq correlation
+```{r}
+gene_infos <- readRDS("cytokine_rna_info.rds")
+rnaseq_data <- readRDS("rna_filtered_batch_corrected_normalised_featurecounts.rds")
+id_match <- readRDS("matched_ids.Rds")
+```
+
+# Supplementary figures
+## Figure S1
+Made with Illustrator.
+
+## Figure S2
+Output directly from SUMO.
+
+## Figure S3
+```{r}
+sex_initial_clustering <- generate_plot(
+  type = "sex",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  )
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s3/figure_s3.pdf",
+       sex_initial_clustering,
+       width = 15,
+       height = 10,
+       units = "cm"
+)
+```
+
+
+## Figure S4
+```{r}
+chromosome_distribution_initial_clustering <- generate_plot(
+  type = "chromosomes",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  gene_list = important_genes_initial_clustering %>% slice(1:100) %>% pull(gene),
+  drop_exotic_chromosomes = FALSE
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+chromosome_distribution_all <- generate_plot(
+  type = "chromosomes",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  gene_list = important_genes_initial_clustering %>% pull(gene)
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+Bring them together:
+```{r}
+chromosome_distribution_combined <- ggarrange(
+  chromosome_distribution_initial_clustering,
+  chromosome_distribution_all,
+  ncol = 1,
+  labels = "AUTO"
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s4/figure_s4.pdf",
+       chromosome_distribution_combined,
+       width = 18,
+       height = 15,
+       units = "cm")
+```
+
+## Figure S5
+```{r}
+cidi_initial_clustering <- generate_plot(
+  type = "cidi_single",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  separate_by = "diagnosis",
+  cidi_type = "current",
+  remove_type_string = TRUE,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+  ) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s5/figure_s5.pdf",
+       cidi_initial_clustering,
+       width = 18,
+       height = 18,
+       units = "cm")
+```
+
+## Figure S6
+```{r}
+BDI_sleeping_initial_clustering <- generate_plot(
+  type = "BDI_sleeping_new",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  )
+  ) +
+  ylab("percentage") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(fill = "severity") +
+  ggtitle('BDI item 16 "changes in\nsleeping pattern"')
+
+BDI_eating_new_initial_clustering <- generate_plot(
+  type = "BDI_eating_new",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  )
+  ) +
+  ylab("percentage") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(fill = "severity") +
+  ggtitle('BDI item 18 "changes in\nappetite"')
+```
+
+Add the NNMax_median plot of the ECG data:
+```{r}
+pretty_cluster_assignments <- get_cluster_assignments(
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  general_data = general_data,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  )
+)
+pretty_cluster_assignments <- pretty_cluster_assignments[["cluster_assignments_df"]]
+
+nnmax_median_4_supplement <- general_data$ecg %>% 
+  left_join(pretty_cluster_assignments, by = "ID") %>% 
+  filter(!is.na(cluster)) %>% 
+  ggplot(aes(x = cluster, y = NNMax_median)) +
+  geom_violin(aes(fill = cluster)) +
+  geom_boxplot(aes(group = cluster), width = 0.2) +
+  theme_bw() +
+  scale_fill_manual(values = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+                    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b", "controls" = "#FFFFFF")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()
+  ) +
+  ylab("Median of maximum interval of\nnormal-to-normal inntervals (NNMax)")
+  
+nnmax_median_4_supplement <- add_dashes(nnmax_median_4_supplement, general_data$ecg %>% 
+  left_join(pretty_cluster_assignments, by = "ID") %>% 
+    filter(!is.na(cluster)))
+nnmax_median_4_supplement
+```
+
+
+```{r}
+BDI_sleeping_eating_initial_clustering <- ggarrange(
+  BDI_sleeping_initial_clustering,
+  BDI_eating_new_initial_clustering,
+  labels = "AUTO",
+  common.legend = TRUE,
+  legend = "right"
+)
+
+ecg_supplement <- ggarrange(
+  nnmax_median_4_supplement,
+  labels = "C"
+)
+
+BDI_single_ecg <- ggarrange(
+  BDI_sleeping_eating_initial_clustering,
+  ecg_supplement,
+  nrow = 2
+  
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s6/figure_s6.pdf",
+       BDI_single_ecg,
+       width = 18,
+       height = 22,
+       units = "cm")
+```
+
+## Figure S7
+```{r}
+rna_cytokine_age_bmi_correlation <- generate_plot(
+  type = "cytokine_RNA_correlation",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_version = "additional_unimputed",
+  rna_type = "standard",
+  sample_type = "cases",
+  cytokine_list = c("IL_1RA", "hsCRP", "PlGF", "MCP_1", "TNF_alpha", "MIP_1beta", "MCP_4"),
+  gene_list = important_genes_initial_clustering %>% slice(1:7) %>% pull(gene),
+  include_age_bmi = TRUE,
+  correct_cytokine_names = TRUE
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s7/figure_s7.pdf",
+        rna_cytokine_age_bmi_correlation,
+        width = 16,
+        height = 15,
+        units = "cm")
+```
+
+## Figure S8
+Needs to be put together via Illustrator.
+Alluvial plot to show how the cluster assignments change:
+```{r}
+cluster_colours_alluvial_corrected <- c(
+  "MIDS" = "#3fd482",
+  "HIRDS1" = "#ffca4d",
+  "LIRDS" = "#6857d9",
+  "HIRDS2" = "#fa5c4b",
+  "cluster 1" = "#30557c",
+  "cluster 2" = "#F28E2B",
+  "cluster 3" = "#e02d51"
+  )
+
+# prepare the data
+data_alluvial <- res_sumo_4_pheno_cyt_rna %>% 
+  left_join(data.frame(
+    cluster = 1:4,
+    initial_clustering = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ), by = "cluster") %>% 
+  select(-cluster, `initial clustering` = initial_clustering) %>%
+  left_join(res_sumo_3_cyt_rna_cov, by = "ID") %>% 
+  rename(`corrected clustering` = cluster) %>% 
+  mutate(`corrected clustering` = paste0("cluster ", `corrected clustering`)) %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "clustering",
+    values_to = "cluster assignment"
+  ) %>% 
+  mutate(
+    clustering = factor(clustering, levels = c("initial clustering",
+                                               "corrected clustering")),
+    `cluster assignment` = factor(`cluster assignment`,
+                                  levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2",
+                                             "cluster 1", "cluster 2", "cluster 3"))
+    )
+
+plot_alluvial_uncorrected_corrected <- data_alluvial %>% 
+  ggplot() +
+  aes(
+    x = clustering,
+    stratum = `cluster assignment`,
+    alluvium = ID,
+    fill = `cluster assignment`
+  ) +
+  geom_flow(stat = "alluvium", lode.guidance = "frontback") +
+  geom_stratum() +
+  geom_label(stat = "stratum",
+             # remove the new from "cluster 1 new" for the labels
+             aes(label = after_stat(stratum)),
+             fill = "white",
+             # the theme size is in pt, the geom_label size is in mm
+             # size = 36 * 0.36
+             ) +
+  scale_fill_manual(values = cluster_colours_alluvial_corrected) +
+  scale_x_discrete(expand = c(0.1, 0.1)) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    axis.title.x = element_blank()
+  )
+
+plot_alluvial_uncorrected_corrected
+```
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/alluvial.pdf",
+       plot_alluvial_uncorrected_corrected,
+       width = 7,
+       height = 7,
+       units = "cm")
+```
+
+
+```{r}
+variable_importance_cytokines_rna_corrected <- generate_plot(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  omic_type = "cytokines_RNA",
+  rna_version = "corrected_1",
+  cytokine_version = "corrected_1",
+  force_cytokines_in_plot = TRUE,
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  show_annotation_string = FALSE,
+  show_gene_id = FALSE,
+  variable_type_colours = c("#9ec91d", "#4196A3"),
+  correct_cytokine_names = TRUE,
+  legend_position = "top"
+  ) +
+  theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.title.x = element_blank()
+        ) +
+  coord_cartesian(ylim = c(0, 80))
+
+variable_importance_cytokines_rna_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/variable_importance.pdf",
+       variable_importance_cytokines_rna_corrected,
+       width = 12,
+       height = 7,
+       units = "cm")
+```
+
+Cytokine and gene distribution:
+```{r}
+cytokine_boxplots_corrected <- generate_plot(
+  type = "cytokines",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  cytokine_list = c("IL_27", "IL_1RA", "TNF_beta", "VEGF_D", "IL_17B", "IL_7",
+                    "Tie_2"),
+  violin = TRUE,
+  complete_names = FALSE,
+  cytokine_version = "corrected_1",
+  sort_by_list = TRUE,
+  pretty_names = TRUE,
+  correct_cytokine_names = TRUE,
+  ncol = 4,
+  cluster_colours = c("cluster 1" = "#30557c",
+                      "cluster 2" = "#F28E2B",
+                      "cluster 3" = "#e02d51")
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 10),
+    legend.position = "none"
+  ) +
+  ylab("normalized concentration corrected for age/sex/BMI")
+
+cytokine_boxplots_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/cytokine_distribution.pdf",
+       cytokine_boxplots_corrected,
+       width = 9,
+       height = 7,
+       units = "cm")
+```
+
+```{r}
+genes_boxplot_corrected <- generate_plot(
+    type = "RNA",
+    general_data = general_data,
+    cluster_assignments = res_sumo_3_cyt_rna_cov,
+    rna_type = "corrected_1",
+    gene_list = c("ENSG00000091317", "ENSG00000068697", "ENSG00000102144",
+                  "ENSG00000102580", "ENSG00000180776", "ENSG00000104388",
+                  "ENSG00000122862"),
+    compare_means_test = NA,
+    sort_by_list = TRUE,
+    ncol = 4,
+    facet_scale = "fixed",
+    show_gene_id = FALSE,
+    cluster_colours = c("cluster 1" = "#30557c",
+                      "cluster 2" = "#F28E2B",
+                      "cluster 3" = "#e02d51")
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 10),
+    legend.position = "none"
+  ) +
+  ylab("normalized concentration corrected for age/sex/BMI")
+
+genes_boxplot_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/gene_distribution.pdf",
+       genes_boxplot_corrected,
+       width = 9,
+       height = 7,
+       units = "cm")
+```
+
+BDI distribution
+```{r}
+bdi_corrected <- generate_plot(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_colours = c("cluster 1" = "#30557c",
+                      "cluster 2" = "#F28E2B",
+                      "cluster 3" = "#e02d51")
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+    ) +
+  ylab("BDI")
+
+bdi_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/bdi.pdf",
+       bdi_corrected,
+       width = 5.5,
+       height = 7,
+       units = "cm")
+```
+
+Age distribution
+```{r}
+age_corrected <- generate_plot(
+  type = "age",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_colours = c("cluster 1" = "#30557c",
+                      "cluster 2" = "#F28E2B",
+                      "cluster 3" = "#e02d51")
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+    ) +
+  ylab("age")
+
+age_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/age.pdf",
+       age_corrected,
+       width = 5.5,
+       height = 7,
+       units = "cm")
+```
+
+BMI distribution
+```{r}
+bmi_corrected <- generate_plot(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_colours = c("cluster 1" = "#30557c",
+                      "cluster 2" = "#F28E2B",
+                      "cluster 3" = "#e02d51"),
+  use_unimputed_data = TRUE
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+    ) +
+  ylab("BMI")
+
+bmi_corrected
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s8/bmi.pdf",
+       bmi_corrected,
+       width = 5.5,
+       height = 7,
+       units = "cm")
+```
+
+## Figure S9
+```{r}
+age_reclustering <- generate_plot(
+  type = "age",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:3,
+    cluster_new = c("reMIDS", "reIDS", "reHIRDS")
+  ),
+  cluster_colours = c(
+    "reMIDS" = "#94d4b1",
+    "reIDS" = "#b3b3b3",
+    "reHIRDS" = "#ffe099"
+  )
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+bmi_reclustering <- generate_plot(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  compare_means_test = NA,
+  median_BMI_annotation = FALSE,
+  use_unimputed_data = TRUE,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:3,
+    cluster_new = c("reMIDS", "reIDS", "reHIRDS")
+  ),
+  cluster_colours = c(
+    "reMIDS" = "#94d4b1",
+    "reIDS" = "#b3b3b3",
+    "reHIRDS" = "#ffe099"
+  )
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+bdi_reclustering <- generate_plot(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  compare_means_test = NA,
+  x_axis_legend = element_blank(),
+  cluster_names = data.frame(
+    cluster = 1:3,
+    cluster_new = c("reMIDS", "reIDS", "reHIRDS")
+  ),
+  cluster_colours = c(
+    "reMIDS" = "#94d4b1",
+    "reIDS" = "#b3b3b3",
+    "reHIRDS" = "#ffe099"
+  )
+) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  ylab("BDI")
+```
+
+```{r}
+age_bmi_bdi_reclustering <- ggarrange(
+  age_reclustering, bmi_reclustering, bdi_reclustering,
+  common.legend = TRUE,
+  legend = "bottom",
+  nrow = 1,
+  labels = "AUTO"
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s9/figure_s9.pdf",
+       age_bmi_bdi_reclustering,
+       width = 18,
+       height = 12,
+       units = "cm")
+```
+
+## Figure S10
+Match the genes to the immune marker:
+```{r}
+cytokine_names <- data.frame(
+  cytokine_name_raw = colnames(general_data$cytokine_uncorrected)[seq(from = 8, to = ncol(general_data$cytokine_uncorrected))]
+)
+# exclude Cortison (not a peptide)
+cytokine_names <- cytokine_names[cytokine_names$cytokine_name_raw != "Cortisol", , drop = FALSE]
+
+cytokine_names <- cytokine_names %>% 
+  mutate(cytokine_name_clean = str_replace_all(cytokine_name_raw, "_", ""))
+```
+
+Try to match cytokines to genes with this crude approach:
+```{r}
+gene_cytokine_combined <- gene_infos %>% 
+  left_join(cytokine_names, by = c("external_gene_name" = "cytokine_name_clean"))
+```
+
+```{r}
+sum(!is.na(gene_cytokine_combined$cytokine_name_raw))
+```
+
+For the following cytokines it didn't work:
+```{r}
+cytokine_names %>% 
+  filter(!cytokine_name_raw %in% gene_cytokine_combined$cytokine_name_raw)
+```
+
+Check manually if these genes are contained in the list, if not, record the gene names:
+```{r}
+additional_gene_cytokine_matching <- data.frame(
+  cytokine_name_raw = c("bFGF", "Eotaxin", "Eotaxin_3",
+                        "Flt_1", "ICAM_1", "IFN_gamma",
+                        "IL_12_IL_23p40", "IL_12_IL_23p40", "IL_12p70",
+                        "IL_12p70", "IL_1alpha", "IL_1RA",
+                        "IP_10", "MCP_1", "MCP_4",
+                        "MDC", "MIP_1alpha", 
+                        "MIP_1beta", "PlGF", "SAA",
+                        "SAA", "SAA", "SAA",
+                        "TARC", "Tie_2", "TNF_alpha",
+                        "VCAM_1", "VEGF_A_HS", "VEGF_D",
+                        "TNF_beta", "VEGF_C", "IL_8_HS",
+                        "hsCRP", "IL_6HS", "sIL_6R"),
+  ensembl_gene_id = c("ENSG00000138685", "ENSG00000172156", "ENSG00000006606",
+                      "ENSG00000102755", "ENSG00000090339", "ENSG00000111537",
+                      # IL_12_IL_23p40 and IL_12p70 consist of 2 subunits
+                      "ENSG00000113302", "ENSG00000110944", "ENSG00000168811",
+                      "ENSG00000113302", "ENSG00000115008", "ENSG00000136689",
+                      "ENSG00000169245", "ENSG00000108691", "ENSG00000181374",
+                      # for MIP_1alpha and MIP_1beta I used the ID from the
+                      # primary assembly
+                      "ENSG00000102962", "ENSG00000277632",
+                      # SAA has in fact 4 different genes
+                      "ENSG00000275302", "ENSG00000119630", "ENSG00000173432",
+                      "ENSG00000134339", "ENSG00000166787", "ENSG00000148965",
+                      # for TNF_alpha I used the ID from the primary assembly
+                      "ENSG00000102970", "ENSG00000120156", "ENSG00000232810",
+                      "ENSG00000162692", "ENSG00000112715", "ENSG00000165197",
+                      # for TNF_beta I used th ID from the primary assembly
+                      "ENSG00000226979", "ENSG00000150630", "ENSG00000169429",
+                      "ENSG00000132693", "ENSG00000136244", "ENSG00000160712")
+)
+```
+
+```{r}
+gene_cytokine_combined <- gene_cytokine_combined %>% 
+  select(ensembl_gene_id, cytokine_name_raw) %>% 
+  filter(!is.na(cytokine_name_raw)) %>% 
+  bind_rows(additional_gene_cytokine_matching)
+```
+
+Data for visualization:
+```{r}
+available_genes <- rownames(rnaseq_data)[rownames(rnaseq_data) %in% gene_cytokine_combined$ensembl_gene_id]
+rna_data_prepared <- as.data.frame(t(rnaseq_data)[, available_genes])
+rna_data_prepared$combined_id <- rownames(rna_data_prepared)
+rna_data_prepared <- rna_data_prepared %>%
+  left_join(id_match, by = "combined_id") %>% 
+  filter(library_rna_amount == 200,
+         ID %in% cytokine_data$ID) %>% 
+  select(ID, starts_with("ENSG")) %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "ensembl_gene_id",
+    values_to = "gene_expression"
+  )
+cytokine_data_prepared <- cytokine_data %>% 
+  select(ID, bFGF:sIL_6R) %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "cytokine_name_raw",
+    values_to = "cytokine_concentration"
+  )
+
+gene_cytokine_data <- gene_cytokine_combined %>% 
+  filter(ensembl_gene_id %in% rownames(rnaseq_data)) %>% 
+  left_join(rna_data_prepared, by = "ensembl_gene_id") %>% 
+  left_join(cytokine_data_prepared, by = c("cytokine_name_raw", "ID"))
+```
+
+```{r}
+rna_cytokine_correlation_all <- gene_cytokine_data %>% 
+  mutate(
+    cytokine_name_pretty = case_when(
+      cytokine_name_raw == "ICAM_1" ~ "ICAM-1",
+      cytokine_name_raw == "IL_12_IL_23p40" ~ "IL-12/IL-23p40",
+      cytokine_name_raw == "IL_15" ~ "IL-15",
+      cytokine_name_raw == "IL_16" ~ "IL- 16",
+      cytokine_name_raw == "IL_1RA" ~ "IL-1RA",
+      cytokine_name_raw == "IL_8_HS" ~ "IL-8",
+      cytokine_name_raw == "MIP_1alpha" ~ "CCL3",
+      cytokine_name_raw == "MIP_1beta" ~ "CCL4",
+      cytokine_name_raw == "sIL_6R" ~ "sIL-6R",
+      cytokine_name_raw == "TNF_alpha" ~ "TNF",
+      cytokine_name_raw == "TNF_beta" ~ "LT-alpha",
+      cytokine_name_raw == "VEGF_A_HS" ~ "VEGF-A"
+    ),
+    cytokine_name_pretty = paste0(cytokine_name_pretty, "\n", ensembl_gene_id)
+  ) %>% 
+  ggplot() +
+  aes(x = gene_expression, y = cytokine_concentration) +
+  geom_point() +
+  geom_smooth(
+    method = "lm"
+  ) +
+  geom_point() +
+  stat_cor() +
+  theme_bw() +
+  facet_wrap(~cytokine_name_pretty) +
+  xlab("normalized expression") +
+  ylab("normalized immune marker concentration")
+
+rna_cytokine_correlation_all
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s10/figure_s10.pdf",
+       rna_cytokine_correlation_all,
+       width = 18,
+       height = 15,
+       units = "cm")
+```
+
+# Supplementary tables
+## Table S1
+Somatic diseases are available for both Become and Optima (at least for a part),
+while somatic medication is only available for Become.
+
+```{r}
+id_data_with_status <- bind_rows(
+  res_sumo_4_pheno_cyt_rna %>% select(ID) %>% mutate(status = "case"),
+  general_data$control_ids %>% mutate(status = "control")
+)
+
+# medication information
+medication_become_info <- general_data$medication_become_categories %>% 
+  right_join(id_data_with_status, by = "ID")
+
+# determine the available data
+medication_become_info %>% 
+  group_by(status) %>% 
+  summarise(total = n(),
+            # here, if cardiac_med is missing all other variables are missing as
+            # well
+            is_missing = sum(is.na(cardiac_med)),
+            available = total - is_missing)
+
+# summarise the data
+medication_become_info_summary <- medication_become_info %>% 
+  filter(!is.na(cardiac_med)) %>% 
+  # remove antiepileptics and herbal psychotrophics as this is already included
+  # in Table 1
+  select(-c(antiepileptics, herbal_psychotropics)) %>% 
+  group_by(status) %>% 
+  summarise(
+    across(thyroid_med:nutr_suppl, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
+    across(thyroid_med:nutr_suppl, ~sum(.x == 1), .names = "{.col}-n"),
+    across(thyroid_med:nutr_suppl, ~sum(.x == 1) / n() * 100, .names = "{.col}-perc")
+            )
+
+medication_become_info_summary_long <- medication_become_info_summary %>% 
+  pivot_longer(
+    cols = -status,
+    names_to = c("disease/medication", ".value"),
+    names_sep = "-"
+  )
+
+# somatic disease info
+somatic_diseases_info <- general_data$somatic_data_single %>% 
+  right_join(id_data_with_status, by = "ID")
+
+# determine the available data
+somatic_diseases_info %>% 
+  rowwise() %>% 
+  mutate(is_missing_all = all(is.na(c_across(starts_with("msp"))))) %>% 
+  ungroup() %>% 
+  group_by(status) %>% 
+  summarise(total = n(),
+            # remove all rows/subjects that are missing across all variables
+            is_missing = sum(is_missing_all),
+            available = total - is_missing)
+
+# summarise the data
+somatic_diseases_info_summary <- somatic_diseases_info %>% 
+  rowwise() %>% 
+  mutate(is_missing_all = all(is.na(c_across(starts_with("msp"))))) %>% 
+  ungroup() %>% 
+  filter(!is_missing_all) %>% 
+  rename_with(~str_replace(.x, "^msp_", ""), .cols = starts_with("msp")) %>% 
+  group_by(status) %>% 
+  summarise(
+    across(diabetes:neurodermatitis, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
+    across(diabetes:neurodermatitis, function(x) {sum(x == 1, na.rm = TRUE)},
+           .names = "{.col}-n")
+            )
+
+somatic_diseases_info_summary_long <- somatic_diseases_info_summary %>% 
+  pivot_longer(
+    cols = -status,
+    names_to = c("disease/medication", ".value"),
+    names_sep = "-"
+  ) %>% 
+  # do the percentage calculation step that I couldn't do previously
+  mutate(
+    perc = n / n_available * 100
+  )
+```
+
+Bring the data together and rename columns:
+```{r}
+somatic_diseases_medication_info <- bind_rows(
+  somatic_diseases_info_summary_long,
+  medication_become_info_summary_long
+) %>% 
+  rename(`n data available` = n_available,
+         percentage = perc)
+  
+```
+
+
+## Table S2
+```{r}
+# look only at missingness in sample used for clustering
+missingness_cytokines <- general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_4_pheno_cyt_rna %>% select(ID), by = "ID") %>% 
+  select(ID, BMI, bFGF:sIL_6R) %>% 
+  pivot_longer(
+    cols = -ID,
+    names_to = "variable"
+  ) %>% 
+  group_by(variable) %>% 
+  summarise(
+    `n missing` = sum(is.na(value)),
+    `percent missing` = `n missing` / n() * 100
+  )
+
+missingness_cytokines <- correct_cytokine_names(missingness_cytokines, variable)
+```
+
+## Table S3
+```{r}
+study_by_cluster <- bind_rows(
+  res_sumo_4_pheno_cyt_rna %>% 
+  mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+  count(cluster, study) %>% 
+  mutate(clustering = "initial",
+         cluster = case_when(
+           cluster == 1 ~ "MIDS",
+           cluster == 2 ~ "HIRDS1",
+           cluster == 3 ~ "LIRDS",
+           cluster == 4 ~ "HIRDS2"
+         )) %>% 
+  relocate(clustering) %>% 
+  tibble::add_row(clustering = "initial", cluster = "controls", study = "BeCOME", n = 36),
+  res_sumo_3_cyt_rna_cov %>% 
+  mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+  count(cluster, study) %>% 
+  mutate(clustering = "corrected for age/sex/BMI",
+         cluster = paste0("cluster ", cluster)) %>% 
+  relocate(clustering) %>% 
+    tibble::add_row(clustering = "corrected for age/sex/BMI", cluster = "controls", study = "BeCOME", n = 36),
+  res_sumo_3_pheno_cell_cyt_rna %>% 
+  mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+  count(cluster, study) %>% 
+  mutate(clustering = "refined with cell types",
+         cluster = case_when(
+           cluster == 1 ~ "reMIDS",
+           cluster == 2 ~ "reIDS",
+           cluster == 3 ~ "reHIRDS"
+         )) %>% 
+  relocate(clustering) %>% 
+    tibble::add_row(clustering = "refined with cell types", cluster = "controls", study = "BeCOME", n = 36)
+)
+
+# add info about RNA-seq, ECG and imaging data
+rna_missing_wide <- general_data$rna %>% 
+  pivot_wider(
+    names_from = "gene",
+    values_from = "expression"
+  ) %>% 
+  rowwise() %>% 
+  mutate(all_missing = all(is.na(c_across(starts_with("ENSG"))))) %>% 
+  select(ID, all_missing) %>%
+  ungroup()
+
+rna_controls_missing <- rna_missing_wide %>%
+  filter(!all_missing) %>% 
+  inner_join(general_data$control_ids, by = "ID")
+# 33 available
+
+rna_n <- bind_rows(
+  res_sumo_4_pheno_cyt_rna %>% 
+    mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+    left_join(rna_missing_wide, by = "ID") %>% 
+    group_by(cluster, study) %>% 
+    summarise(`n RNA-seq` = sum(!all_missing)) %>% 
+    mutate(clustering = "initial",
+           cluster = case_when(
+             cluster == 1 ~ "MIDS",
+             cluster == 2 ~ "HIRDS1",
+             cluster == 3 ~ "LIRDS",
+             cluster == 4 ~ "HIRDS2"
+           )) %>% 
+    relocate(clustering) %>% 
+    ungroup() %>% 
+    tibble::add_row(clustering = "initial", cluster = "controls", study = "BeCOME", `n RNA-seq` = 33),
+  res_sumo_3_cyt_rna_cov %>% 
+    mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+    left_join(rna_missing_wide, by = "ID") %>% 
+    group_by(cluster, study) %>% 
+    summarise(`n RNA-seq` = sum(!all_missing)) %>% 
+    mutate(clustering = "corrected for age/sex/BMI",
+           cluster = paste0("cluster ", cluster)) %>% 
+    relocate(clustering) %>%
+    ungroup() %>% 
+    tibble::add_row(clustering = "corrected for age/sex/BMI", cluster = "controls", study = "BeCOME", `n RNA-seq` = 33),
+  res_sumo_3_pheno_cell_cyt_rna %>% 
+    mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+    left_join(rna_missing_wide, by = "ID") %>% 
+    group_by(cluster, study) %>% 
+    summarise(`n RNA-seq` = sum(!all_missing)) %>% 
+    mutate(clustering = "refined with cell types",
+           cluster = case_when(
+             cluster == 1 ~ "reMIDS",
+             cluster == 2 ~ "reIDS",
+             cluster == 3 ~ "reHIRDS"
+           )) %>% 
+    ungroup() %>% 
+    tibble::add_row(clustering = "refined with cell types", cluster = "controls", study = "BeCOME", `n RNA-seq` = 33)
+)
+
+ecg_missing <- general_data$ecg %>% 
+  mutate(is_missing = is.na(SDNN)) %>% 
+  select(ID, is_missing)
+
+ecg_controls_missing <- ecg_missing %>%
+  filter(!is_missing) %>% 
+  inner_join(general_data$control_ids, by = "ID")
+# 32 available
+
+ecg_n <- res_sumo_4_pheno_cyt_rna %>% 
+    mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+    left_join(ecg_missing, by = "ID") %>% 
+    group_by(cluster, study) %>% 
+    summarise(`n ECG` = sum(!is_missing)) %>% 
+    mutate(clustering = "initial",
+           cluster = case_when(
+             cluster == 1 ~ "MIDS",
+             cluster == 2 ~ "HIRDS1",
+             cluster == 3 ~ "LIRDS",
+             cluster == 4 ~ "HIRDS2"
+           )) %>% 
+    relocate(clustering) %>% 
+    ungroup() %>% 
+    tibble::add_row(clustering = "initial", cluster = "controls", study = "BeCOME", `n ECG` = 32)
+
+imaging_missing <- general_data$imaging_volumina %>% 
+  filter(region == "LatVent")
+
+imaging_controls_missing <- imaging_missing %>%
+  inner_join(general_data$control_ids, by = "ID")
+# 29
+
+imaging_n <- res_sumo_4_pheno_cyt_rna %>% 
+    mutate(study = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+    inner_join(imaging_missing, by = "ID") %>% 
+    count(cluster, study, name = "n imaging") %>% 
+    mutate(clustering = "initial",
+           cluster = case_when(
+             cluster == 1 ~ "MIDS",
+             cluster == 2 ~ "HIRDS1",
+             cluster == 3 ~ "LIRDS",
+             cluster == 4 ~ "HIRDS2"
+           )) %>% 
+    relocate(clustering) %>% 
+    tibble::add_row(clustering = "initial", cluster = "controls", study = "BeCOME", `n imaging` = 29)
+
+study_by_cluster <- study_by_cluster %>% 
+  left_join(rna_n, by = c("clustering", "cluster", "study")) %>% 
+  left_join(ecg_n, by = c("clustering", "cluster", "study")) %>% 
+  left_join(imaging_n, by = c("clustering", "cluster", "study"))
+```
+
+
+## Table S4
+```{r}
+variable_importance_initial_clustering <- generate_report(
+  type = "variable_importance_cytokines_rna",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cytokine_version = "additional_unimputed",
+  rna_version = "standard",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  include_celltypes = FALSE
+)
+
+variable_importance_initial_clustering <- variable_importance_initial_clustering %>% 
+  tibble::rowid_to_column("rank") %>% 
+  select(rank, variable, `variable importance` = F_value)
+```
+
+## Table S5
+```{r}
+# use the GRCh38 by ENSEMBL data
+gene_location_info <- data.frame(
+  gene_name = c("NRCAM", "NAP1L2", "FBLN2", "PXYLP1", "SH3RF3", "EDA",
+                  "XKRX", "CMTM6", "ZEB2", "PLCG1", "RHOQ", "GAS7", "EVL",
+                  "AMIGO1", "LINC01550"),
+  location = c(
+    "chr7:108,147,623-108,456,720", "chrX:73,212,299-73,214,851",
+    "chr3:13,549,125-13,638,422", "chr3:141,228,726-141,367,753",
+    "chr2:109,129,205-109,504,634", "chrX:69,616,067-70,039,472",
+    "chrX:100,886,916-100,959,343", "chr3:32,481,312-32,502,852",
+    "chr2:144,364,364-144,521,057", "chr20:41,136,960-41,196,801",
+    "chr2:46,541,806-46,584,688", "chr17:9,910,606-10,198,606",
+    "chr14:99,971,422-100,144,236", "chr1:109,504,178-109,509,738",
+    "chr14:97,924,637-97,978,234"
+  )
+) %>% 
+  rename(`gene name` = gene_name) %>% 
+  arrange(`gene name`)
+```
+
+## Table S6
+Data from imaging analysis:
+```{r}
+imaging_table_1 <- tibble::tibble(
+  `Volume phenotype` = c("", "Total BV", "Total GM", "Total WM"),
+  `F-value` = c("", 2.406, 1.869, 2.059),
+  `p-value` = c("", 0.070, 0.137, 0.108),
+  MIDS = c("Adjusted mean (SEM)", "1207.8 (4.5)", "689.3 (3.4)", "518.5 (3.3)"),
+  HIRDS1 = c("Adjusted mean (SEM)", "1210.7 (6.7)", "684.9 (5.1)", "525.8 (5.0)"),
+  LIRDS = c("Adjusted mean (SEM)", "1229.1 (8.9)", "703.1 (6.8)", "526.0 (6.7)"),
+  HIRDS2 = c("Adjusted mean (SEM)", "1197.5 (12.0)", "692.3 (9.1)", "505.1 (9.0)"),
+  `Pair-wise comparisons` = c("", "LIRDS > MIDS+, LIRDS > HIRDS1+, LIRDS > HIRDS2*", "LIRDS > HIRDS1*", "LIRDS > HIRDS2*, HIRDS1 > HIRDS2*")
+)
+```
+
+
+## Table S7
+```{r}
+pretty_imaging_names <- data.frame(`FreeSurver phenotype` = c("Left medial orbitofrontal cortex",
+                                                              "Right medial orbitofrontal cortex",
+                                                              "Left rostral anterior cingulate cortex",
+                                                              "Right lateral orbitofrontal cortex",
+                                                              "Left fusiform gyrus",
+                                                              "Right inferior temporal gyrus",
+                                                              "Right fusiform gyrus",
+                                                              "Right insula",
+                                                              "Left insula",
+                                                              "Left isthmus cingulate cortex",
+                                                              "Left posterior cingulate cortex",
+                                                              "Right rostral anterior cingulate cortex",
+                                                              "Right posterior cingulate cortex",
+                                                              "Left middle temporal gyrus",
+                                                              "Right caudal anterior cingulate cortex",
+                                                              "Bilateral lateral ventricles",
+                                                              "Bilateral hippocampus"),
+                                   variable = c("L_medialorbitofrontal_thickavg",
+                                                "R_medialorbitofrontal_thickavg",
+                                                "L_rostralanteriorcingulate_thickavg",
+                                                "R_lateralorbitofrontal_thickavg",
+                                                "L_fusiform_thickavg",
+                                                "R_inferiortemporal_thickavg",
+                                                "R_fusiform_thickavg",
+                                                "R_insula_thickavg",
+                                                "L_insula_thickavg",
+                                                "L_isthmuscingulate_thickavg",
+                                                "L_posteriorcingulate_thickavg",
+                                                "R_rostralanteriorcingulate_thickavg",
+                                                "R_posteriorcingulate_thickavg",
+                                                "L_middletemporal_thickavg",
+                                                "R_caudalanteriorcingulate_thickavg",
+                                                "LatVent",
+                                                "hippo")
+)
+
+imaging_table_2 <- pretty_imaging_names %>% 
+  left_join(
+    results_4_cluster_final_version %>% select(variable, `F-value` = statistic,
+                                               `p-value` = p.value,
+                                               `p-value adj.` = p_value_adjusted),
+    by = "variable"
+  ) %>% 
+  dplyr::mutate(across(`F-value`:`p-value adj.`, round, 3)) %>% 
+  select(-variable) %>% 
+  rename(`FreeSurver phenotype` = FreeSurver.phenotype)
+```
+
+
+## Table S8
+```{r}
+gsva_go_clean_uncorrected <- as.data.frame(t(gsva_go_uncorrected))
+gsva_go_clean_uncorrected$ID <- rownames(gsva_go_clean_uncorrected)
+rownames(gsva_go_clean_uncorrected) <- NULL
+
+geneset_importance_initial_clustering <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  omic_type = "genesets",
+  geneset_results = gsva_go_clean_uncorrected,
+  include_p_value = TRUE
+)
+
+geneset_importance_initial_clustering <- geneset_importance_initial_clustering %>% 
+  tibble::rowid_to_column("rank") %>% 
+  select(rank, geneset, `variable importance` = F_value)
+```
+
+## Table S9
+```{r}
+variable_importance_corrected_clustering <- generate_report(
+  type = "variable_importance_cytokines_rna",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  cytokine_version = "corrected_1",
+  rna_version = "corrected_1",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  include_celltypes = FALSE
+)
+
+variable_importance_corrected_clustering <- variable_importance_corrected_clustering %>% 
+  tibble::rowid_to_column("rank") %>% 
+  select(rank, variable, `variable importance` = F_value)
+```
+
+## Table S10
+```{r}
+variable_importance_reclustering <- generate_report(
+  type = "variable_importance_cytokines_rna",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  cytokine_version = "additional_unimputed",
+  rna_version = "standard",
+  show_gene_names = TRUE,
+  include_age_bmi = TRUE,
+  include_celltypes = TRUE
+)
+
+variable_importance_reclustering <- variable_importance_reclustering %>% 
+  tibble::rowid_to_column("rank") %>% 
+  select(rank, variable, `variable importance` = F_value)
+```
+
+## Table S11
+```{r}
+geneset_importance_reclustering <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  omic_type = "genesets",
+  geneset_results = gsva_go_clean_uncorrected,
+  include_p_value = TRUE
+)
+
+geneset_importance_reclustering <- geneset_importance_reclustering %>% 
+  tibble::rowid_to_column("rank") %>% 
+  select(rank, geneset, `variable importance` = F_value)
+```
+
+## Save the tables
+```{r}
+tables_list <- list(
+  "Table S1" = somatic_diseases_medication_info,
+  "Table S2" = missingness_cytokines,
+  "Table S3" = study_by_cluster,
+  "Table S4" = variable_importance_initial_clustering,
+  "Table S5" = gene_location_info,
+  "Table S6" = imaging_table_1,
+  "Table S7" = imaging_table_2,
+  "Table S8" = geneset_importance_initial_clustering,
+  "Table S9" = variable_importance_corrected_clustering,
+  "Table S10" = variable_importance_reclustering,
+  "Table S11" = geneset_importance_reclustering
+)
+
+hs <- createStyle(textDecoration = "Bold")
+
+write.xlsx(tables_list, "../../../paper/tables/supplemental_tables.xlsx",
+           headerStyle = hs)
+```
