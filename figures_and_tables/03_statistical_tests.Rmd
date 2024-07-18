@@ -46,7 +46,7 @@ res_sumo_4_pheno_cyt_rna <- res_sumo_4_pheno_cyt_rna %>%
   rename(ID = sample, cluster = label)
 ```
 
-## Clustering corrected for age/sex/BMI
+## Secondary analysis: clustering corrected for age/sex/BMI
 ```{r}
 res_sumo_3_cyt_rna_cov <- read.table("04_cytokines_rna_corrected_covariates/01_res_cytokines_rna_corrected_covariates_1_seed_max_iter_10000/k3/clusters.tsv",
                        header = TRUE)
@@ -55,7 +55,7 @@ res_sumo_3_cyt_rna_cov <- res_sumo_3_cyt_rna_cov %>%
   rename(ID = sample, cluster = label)
 ```
 
-## Reclustering with celltypes
+## Exploratory analysis: reclustering with celltypes
 ```{r}
 res_sumo_3_pheno_cell_cyt_rna <- read.table("01_res_phenotypes_celltypes_14_cytokines_rna_seed_max_iter_10000/k3/clusters.tsv",
                        header = TRUE)
@@ -64,17 +64,88 @@ res_sumo_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>%
   rename(ID = sample, cluster = label)
 ```
 
+## Data replication
+```{r}
+data_replication_top10 <- readRDS("data_replication_top10.rds")
+```
+
+## Data Mehta
+```{r}
+# DEGs for which we have RNAseq data
+overlapping_genes <- readRDS("deg_baseline_followup_clean_overlapping_with_our_data.rds")
+```
+
+
 # Statistics
-Test the distribution of several phenotypes across the clusters.
+Test the distribution of several phenotypes across the clusters and between the
+cases and controls without a DSM-IV diagnosis.
+
+## Cases vs. controls
+Age
+```{r}
+ids_case_control <- res_sumo_4_pheno_cyt_rna %>% 
+  mutate(status = "case") %>% 
+  select(-cluster) %>% 
+  bind_rows(general_data$control_ids %>% mutate(status = "control"))
+
+test_data_age <- general_data$age %>% 
+  right_join(ids_case_control, by = "ID")
+
+test_data_age %>% 
+  group_by(status) %>% 
+  summarise(sd = sd(age))
+
+t.test(test_data_age$age ~ test_data_age$status)
+```
+
+Sex
+```{r}
+test_data_sex <- general_data$imputed_data %>% 
+  right_join(ids_case_control, by = "ID") %>% 
+  filter(.imp == 1) %>% 
+  select(ID, status, sex)
+
+fisher.test(x = test_data_sex$sex, y = test_data_sex$status)
+```
+
+BMI
+```{r}
+test_data_bmi <- general_data$bmi %>% 
+  right_join(ids_case_control, by = "ID")
+
+test_data_bmi %>% 
+  group_by(status) %>% 
+  summarise(sd = sd(BMI, na.rm = TRUE))
+
+t.test(test_data_bmi$BMI ~ test_data_bmi$status)
+```
 
 ## Initial clustering
+Sex
+```{r}
+generate_test(
+  type = "sex",
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  general_data = general_data
+)
+```
+
 BDI/MADRS
 ```{r}
 generate_test(
   type = "BDI",
   general_data = general_data,
   cluster_assignments = res_sumo_4_pheno_cyt_rna,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 
@@ -83,7 +154,16 @@ generate_test(
   type = "MADRS",
   general_data = general_data,
   cluster_assignments = res_sumo_4_pheno_cyt_rna,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 
@@ -91,8 +171,24 @@ generate_test(
 generate_test(
   type = "BDI_single",
   general_data = general_data,
-  cluster_assignments = res_sumo_4_pheno_cyt_rna
-)
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  include_controls = FALSE
+) %>% 
+  mutate(
+    p_value_adjusted = p.adjust(p_value, method = "BH")
+  ) %>% 
+  arrange(p_value_adjusted)
+
+generate_test(
+  type = "BDI_single",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  include_controls = TRUE
+) %>% 
+  mutate(
+    p_value_adjusted = p.adjust(p_value, method = "BH")
+  ) %>% 
+  arrange(p_value_adjusted)
 ```
 
 CIDI diagnoses:
@@ -175,7 +271,17 @@ generate_test(
   general_data = general_data,
   cluster_assignments = res_sumo_4_pheno_cyt_rna,
   # with_exclusions means that the participants with low quality data were excluded
-  QC_filtering = "with_exclusions"
+  QC_filtering = "with_exclusions",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "ECG",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  # with_exclusions means that the participants with low quality data were excluded
+  QC_filtering = "with_exclusions",
+  include_controls = TRUE
 )
 ```
 
@@ -186,7 +292,8 @@ test_imaging_thickness_ancova <- generate_test(
   general_data = general_data,
   cluster_assignments = res_sumo_4_pheno_cyt_rna,
   variable_type = "thickness_revised",
-  model_type = "without_age2"
+  model_type = "without_age2",
+  include_controls = TRUE
 )
 
 test_imaging_volume_ancova <- generate_test(
@@ -194,7 +301,8 @@ test_imaging_volume_ancova <- generate_test(
   general_data = general_data,
   cluster_assignments = res_sumo_4_pheno_cyt_rna,
   variable_type = "volumina",
-  model_type = "without_age2"
+  model_type = "without_age2",
+  include_controls = TRUE
 )
 
 results_4_cluster_final_version <- bind_rows(
@@ -207,13 +315,22 @@ results_4_cluster_final_version <- bind_rows(
   )
 ```
 
-## Clustering corrected for age/sex/BMI
+## Secondary analysis: clustering corrected for age/sex/BMI
 ```{r}
 generate_test(
   type = "BDI",
   general_data = general_data,
   cluster_assignments = res_sumo_3_cyt_rna_cov,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 ```{r}
@@ -221,7 +338,16 @@ generate_test(
   type = "MADRS",
   general_data = general_data,
   cluster_assignments = res_sumo_3_cyt_rna_cov,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 
@@ -230,7 +356,16 @@ generate_test(
   type = "age",
   general_data = general_data,
   cluster_assignments = res_sumo_3_cyt_rna_cov,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "age",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 
@@ -240,17 +375,36 @@ generate_test(
   general_data = general_data,
   cluster_assignments = res_sumo_3_cyt_rna_cov,
   method = "Tukey",
-  bmi_source = "with_missing"
+  bmi_source = "with_missing",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "BMI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_cyt_rna_cov,
+  method = "Tukey",
+  bmi_source = "with_missing",
+  include_controls = TRUE
 )
 ```
 
-## Reclustering with cell types
+## Exploratory analysis: reclustering with cell types
 ```{r}
 generate_test(
   type = "BDI",
   general_data = general_data,
   cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
+)
+
+generate_test(
+  type = "BDI",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  method = "Tukey",
+  include_controls = TRUE
 )
 ```
 ```{r}
@@ -258,6 +412,116 @@ generate_test(
   type = "MADRS",
   general_data = general_data,
   cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
-  method = "Tukey"
+  method = "Tukey",
+  include_controls = FALSE
 )
+
+generate_test(
+  type = "MADRS",
+  general_data = general_data,
+  cluster_assignments = res_sumo_3_pheno_cell_cyt_rna,
+  method = "Tukey",
+  include_controls = TRUE
+)
+```
+
+Calculate the mean BMI values per group:
+```{r}
+general_data$cytokine_uncorrected %>% 
+  right_join(res_sumo_3_pheno_cell_cyt_rna, by = "ID") %>% 
+  group_by(cluster) %>% 
+  summarise(mean_BMI = mean(BMI, na.rm = TRUE),
+            median_BMI = median(BMI, na.rm = TRUE))
+```
+
+## Holdout sample vs clustering sample
+
+```{r}
+ids_initial_replication <- res_sumo_4_pheno_cyt_rna %>% 
+  mutate(status = "clustering") %>% 
+  select(-cluster) %>% 
+  bind_rows(data_replication_top10 %>% select(ID) %>% mutate(status = "replication"))
+
+test_data_age_replication <- general_data$age %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+test_data_age_replication %>% 
+  group_by(status) %>% 
+  summarise(sd = sd(age))
+
+t.test(test_data_age_replication$age ~ test_data_age_replication$status)
+```
+
+```{r}
+test_data_sex_replication <- general_data$imputed_data %>% 
+  filter(.imp == 1) %>% 
+  select(ID, sex) %>% 
+  bind_rows(
+    data_replication_top10 %>% select(ID, sex)
+  ) %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+fisher.test(x = test_data_sex_replication$sex, y = test_data_sex_replication$status)
+```
+
+
+```{r}
+test_data_bmi_replication <- general_data$bmi %>% 
+  bind_rows(
+    data_replication_top10 %>% select(ID, BMI)
+  ) %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+test_data_bmi_replication %>% 
+  group_by(status) %>% 
+  summarise(sd = sd(BMI, na.rm = TRUE))
+
+t.test(test_data_bmi_replication$BMI ~ test_data_bmi_replication$status)
+```
+
+```{r}
+test_data_bdi_replication <- general_data$bdi_sumscores %>%
+  select(ID, BDI_total) %>% 
+  bind_rows(
+    data_replication_top10 %>% select(ID, BDI_total)
+  ) %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+test_data_bdi_replication %>% 
+  group_by(status) %>% 
+  summarise(sd = sd(BDI_total, na.rm = TRUE))
+
+t.test(test_data_bdi_replication$BDI_total ~ test_data_bdi_replication$status)
+```
+
+```{r}
+test_data_mdd_replication <- mdd_diagnosis %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+fisher.test(x = test_data_mdd_replication$has_depression_dysthymia, y = test_data_mdd_replication$status)
+```
+
+```{r}
+test_data_medication_replication <- general_data$medication_data %>% 
+  bind_rows(
+    data_medication_all %>% select(ID, t0_any_psych_medication = any_medication)
+  ) %>% 
+  right_join(ids_initial_replication, by = "ID")
+
+fisher.test(x = test_data_medication_replication$t0_any_psych_medication, y = test_data_medication_replication$status)
+```
+
+## Infliximab data
+
+Check which genes of the DEGs show a pattern that distinguished the HIRDS clusters
+(median of both HIRDS clusters are higher or lower than from both MIDS and LIRDS).
+
+```{r}
+mehta_degs_hirds_distinction <- generate_report(type = "RNA_HIRDS_distribution",
+                                                general_data = general_data,
+                                                cluster_assignments = res_sumo_4_pheno_cyt_rna,
+                                                rna_type = "standard",
+                                                gene_list = overlapping_genes %>% filter(timepoint == "baseline") %>%  distinct(ensembl_gene_id) %>% pull(ensembl_gene_id))
+
+dim(mehta_degs_hirds_distinction) # 22 genes
 ```

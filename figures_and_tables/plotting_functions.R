@@ -181,6 +181,10 @@ read_in_general_data <- function(
     select(ID, BMI) %>% 
     right_join(ids_for_filtering, by = "ID")
   
+  # additional medication/disease information
+  all_data$oral_corticosteroids <- readRDS("medication_data_become_oral_corticosteroids.rds")
+  all_data$other_autoimmune_diseases <- readRDS("somatic_disease_become_other_autoimmune_diseases.rds")
+  
   all_data
 }
 
@@ -2115,18 +2119,28 @@ plot_imaging_residuals <- function(
     compare_means_test = set_defaults()$compare_means_test,
     compare_means_vjust = 1,
     compare_means_hjust = 0,
+    # this is if the controls are shown in the plot
     remove_controls = FALSE,
+    # this is which data source is used
+    include_controls = FALSE,
     show_n = TRUE,
     ...
 ) {
-  plot_data <- data$imaging_residuals_ventricles %>% 
-    right_join(cluster_assignments_df, by = "ID")
+  if (include_controls) {
+    plot_data <- data$imaging_residuals_ventricles_controls %>% 
+      right_join(cluster_assignments_df, by = "ID")
+    plot_variable <- "Added_to_5"
+  } else {
+    plot_data <- data$imaging_residuals_ventricles %>% 
+      right_join(cluster_assignments_df, by = "ID")
+    plot_variable <- "Added_to_4"
+  }
   
   size_data_detailed <- plot_data %>% 
-    dplyr::select(ID, Added_to_4, cluster) %>% 
+    dplyr::select(ID, .data[[plot_variable]], cluster) %>% 
     distinct(ID, .keep_all = TRUE) %>% 
     # filter out cases for which we don't have information
-    filter(!is.na(Added_to_4)) %>% 
+    filter(!is.na(.data[[plot_variable]])) %>% 
     group_by(cluster) %>% 
     summarise(n = n())
   
@@ -2157,12 +2171,12 @@ plot_imaging_residuals <- function(
   }
   
   
-  y_label <- "lateral ventricle volume without the\neffect of age, sex, ICV"
+  y_label <- "Lateral ventricle volume corrected for age, sex, ICV"
   
   compare_data <- plot_data %>% 
     filter(cluster != "controls", cluster != "lifetime cases")
   p <- plot_data %>% 
-    ggplot(aes(x = cluster, y = Added_to_4)) +
+    ggplot(aes(x = cluster, y = .data[[plot_variable]])) +
     geom_violin(aes(fill = cluster)) +
     geom_boxplot(aes(group = cluster), width = 0.2) +
     stat_compare_means(
@@ -2238,4 +2252,371 @@ plot_chromosomes <- function(
       drop = FALSE,
       guide = "none"
     )
+}
+
+plot_medication_categories_and_somatic_diseases <- function(
+    data,
+    cluster_assignments_df,
+    cluster_colours,
+    ...
+) {
+  
+  # medication information
+  plot_data_medication <- data$medication_become_categories %>% 
+    right_join(cluster_assignments_df, by = "ID") %>% 
+    # add oral corticosteroid info
+    mutate(oral_corticosteroids = case_when(
+      is.na(cardiac_med) ~ NA_integer_,
+      ID %in% data$oral_corticosteroids$ID ~ 1L,
+      TRUE ~ 0L
+    ))
+  
+  size_data_detailed_medication <- plot_data_medication %>% 
+    group_by(cluster) %>% 
+    # filter out Optima cases for which we don't have information
+    filter(!is.na(antiepileptics)) %>% 
+    summarise(n = n())
+  
+  size_data_all_medication <- plot_data_medication %>% 
+    group_by(cluster) %>% 
+    summarise(n_all = n())
+  
+  size_data_detailed_medication <- size_data_detailed_medication %>% 
+    left_join(size_data_all_medication, by = "cluster")
+  
+  n_detailed_medication <- purrr::pmap(size_data_detailed_medication,
+                                       ~paste0(..1, " = ", ..2, " (", ..3, ")"))
+  n_string_medication <- paste0("medication n (all): ",
+                                paste0(n_detailed_medication, collapse = "; "))
+  
+  plot_data_medication_long <- plot_data_medication %>%
+    pivot_longer(
+      cols = -c(ID, cluster),
+      names_to = "variable",
+      values_to = "is_contained"
+    ) %>% 
+    # filter out Optima cases for which we don't have information
+    filter(!is.na(is_contained)) %>% 
+    # filter out categories that are contained in the psychopharmaca categories
+    # and here only assessed for become
+    filter(!variable %in% c("antiepileptics", "herbal_psychotropics")) %>% 
+    mutate(category = "medication")
+  
+  # somatic disease info
+  plot_data_somatic_diseases <- data$somatic_data_single %>% 
+    left_join(data$other_autoimmune_diseases, by = "ID") %>% 
+    right_join(cluster_assignments_df, by = "ID")
+  
+  size_data_detailed_somatic_diseases <- plot_data_somatic_diseases %>% 
+    # filter out cases for which we don't have information
+    rowwise() %>% 
+    mutate(is_missing_all = all(is.na(c_across(starts_with("msp"))))) %>% 
+    ungroup() %>% 
+    group_by(cluster) %>% 
+    filter(!is_missing_all) %>% 
+    summarise(n = n())
+  
+  size_data_all_somatic_diseases <- plot_data_somatic_diseases %>% 
+    group_by(cluster) %>% 
+    summarise(n_all = n())
+  
+  size_data_detailed_somatic_diseases <- size_data_detailed_somatic_diseases %>% 
+    left_join(size_data_all_somatic_diseases, by = "cluster")
+  
+  n_detailed_somatic_diseases <- purrr::pmap(size_data_detailed_somatic_diseases,
+                                             ~paste0(..1, " = ", ..2, " (", ..3, ")"))
+  n_string_somatic_diseases <- paste0("somatic diseases n (all): ",
+                                      paste0(n_detailed_somatic_diseases, collapse = "; "))
+  
+  n_string <- paste0(n_string_medication, "\n", n_string_somatic_diseases)
+  
+  plot_data_somatic_diseases_long <- plot_data_somatic_diseases %>%
+    pivot_longer(
+      cols = -c(ID, cluster),
+      names_to = "variable",
+      values_to = "is_contained"
+    ) %>% 
+    # filter out cases for which we don't have information
+    filter(!is.na(is_contained)) %>% 
+    mutate(variable = str_extract(variable, "(?<=msp_).*"),
+           variable = if_else(variable == "arthorsis", "arthrosis", variable),
+           category = "disease")
+  
+  plot_data_long <- bind_rows(
+    plot_data_medication_long,
+    plot_data_somatic_diseases_long
+  ) 
+  # filter out all categories that don't have any count
+  variables_filter_out <- plot_data_long %>% 
+    group_by(variable) %>% 
+    summarise(
+      n = sum(is_contained, na.rm = TRUE)
+    ) %>% 
+    filter(n == 0)
+  
+  plot_data_long <- plot_data_long %>% 
+    filter(!variable %in% variables_filter_out$variable) %>% 
+    mutate(variable = factor(variable, levels = unique(variable)))
+  
+  data_background <- plot_data_long %>% 
+    distinct(variable, category)
+  
+  p <- plot_data_long %>%
+    group_by(cluster, variable) %>% 
+    summarise(n = sum(is_contained)) %>% 
+    left_join(data_background, by = "variable") %>% 
+    ggplot(aes(x = cluster, y = n, label = n)) +
+    geom_rect(aes(fill = category),
+              xmin = -Inf, xmax = Inf,
+              ymin = -Inf, ymax = Inf, alpha = 0.1) +
+    scale_fill_manual(values = c("medication" = "#eb3492", "disease" = "#34e2eb")) +
+    ggnewscale::new_scale_fill() +
+    geom_col(aes(fill = cluster), color = "black") +
+    geom_text(vjust = 0) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.y = element_blank(),
+      strip.text.x = element_text(size = rel(0.8)),
+      legend.position = "bottom"
+    ) +
+    scale_fill_manual(values = cluster_colours) +
+    scale_y_continuous(breaks = function(x) unique(floor(pretty(seq(min(x), (max(x) + 1) * 2)))),
+                       expand = c(0.5, 0)) +
+    facet_wrap(~variable, scale = "free_y", ncol = 5) +
+    labs(caption = n_string)
+  
+  add_dashes(p, plot_data_long)
+}
+
+plot_heatmap_rna <- function(
+    data,
+    cluster_assignments_df,
+    cluster_colours,
+    previous_cluster_colours,
+    id_order,
+    previous_assignments = NULL,
+    annotation_legend = TRUE,
+    legend = TRUE,
+    cluster_cols = FALSE,
+    show_cases_controls = FALSE,
+    scale_expression = FALSE,
+    rna_type = c("standard", "corrected_1"),
+    colour_palette = colorRampPalette(c("white", "red"))(100),
+    included_annotations = NULL,
+    include_controls = FALSE,
+    ...
+) {
+  
+  if (!is.null(previous_assignments)) {
+    # have the possibility to use a data.frame for previous_assignments
+    # (which then can also have a different order) than using cluster and
+    # id_order vectors separately
+    if (inherits(previous_assignments, "data.frame")) {
+      previous_assignments_clean <- get_cluster_assignments(
+        cluster_assignments = previous_assignments,
+        add_healthy_controls = FALSE
+      )
+      
+      previous_assignments_df <- previous_assignments_clean[["cluster_assignments_df"]]
+      previous_assignments_df <- previous_assignments_df %>% 
+        dplyr::rename(previous_cluster = cluster)
+    } else {
+      # have the ability to pass different ID order for previous assignments
+      # because the data with standard cytokines was differently ordered than
+      # the data with additional cytokines
+      if (is.null(previous_assignments_order)) {
+        old_id_order <- id_order
+      } else {
+        old_id_order <- previous_assignments_order
+      }
+      
+      previous_assignments_df <- data.frame(
+        ID = old_id_order,
+        previous_cluster = previous_assignments
+      )
+    }
+    if (include_controls) {
+      cluster_assignments_df <- cluster_assignments_df %>% 
+        # only use ids for clustering, no healthy controls or lifetime cases
+        filter(cluster != "lifetime cases") %>% 
+        left_join(previous_assignments_df, by = "ID")
+    } else {
+      cluster_assignments_df <- cluster_assignments_df %>% 
+        # only use ids for clustering, no healthy controls or lifetime cases
+        filter(cluster != "controls", cluster != "lifetime cases") %>% 
+        left_join(previous_assignments_df, by = "ID")
+    }
+  } else {
+    if (include_controls) {
+      cluster_assignments_df <- cluster_assignments_df %>% 
+        # only use ids for clustering, no healthy controls
+        filter(cluster != "lifetime cases")
+    } else {
+      # exclude healthy controls from cluster assignments
+      # (needs to be done additionally to removing them from the cytokine values,
+      # because otherwise these IDs are added by the right_join with the
+      # cluster assignments later)
+      cluster_assignments_df <- cluster_assignments_df %>% 
+        # only use ids for clustering, no healthy controls
+        filter(cluster != "controls", cluster != "lifetime cases")
+    }
+  }
+  
+  if (rna_type == "standard") {
+    plot_data <- data$rna
+    lab_string <- "normalised concentration"
+  } else if (rna_type == "corrected_1") {
+    plot_data <- data$rna_corrected_1 %>% 
+      dplyr::mutate(gene = str_extract(gene, ".+?(?=_corrected)"))
+    lab_string <- "normalised conc. corrected for age/sex/BMI"
+  } else {
+    stop("This rna_type is not supported.")
+  }
+  
+  if ("gene_list" %in% names(match.call())) {
+    # somehow dplyr has problems filtering
+    rna_index <- plot_data$gene %in% match.call()[["gene_list"]]
+    plot_data <- plot_data[rna_index, ]
+  } else {
+    stop("Please provide a `gene_list` for which genes the expression should be shown.")
+  }
+  
+  plot_data <- plot_data %>% 
+    pivot_wider(
+      id_cols = ID,
+      names_from = "gene",
+      values_from = "expression"
+    ) %>% 
+    right_join(cluster_assignments_df, by = "ID") %>% 
+    arrange(cluster, ID)
+  
+  if (scale_expression) {
+    plot_data <- plot_data %>% 
+      dplyr::mutate(across(starts_with("ENSG"), scale))
+  }
+  
+  
+  if ("previous_cluster" %in% colnames(plot_data)) {
+    heatmap_data <- t(as.matrix(plot_data %>%
+                                  dplyr::select(-c(ID, cluster, previous_cluster))))
+  } else {
+    heatmap_data <- t(as.matrix(plot_data %>% dplyr::select(-c(ID, cluster))))
+  }
+  
+  colnames(heatmap_data) <- plot_data$ID
+  
+  # remove the "controls" and "lifetime" colour from the cluster colours
+  if ("controls" %in% names(cluster_colours) && !include_controls) {
+    cluster_colours <- cluster_colours[names(cluster_colours) != "controls"]
+  }
+  if ("lifetime cases" %in% names(cluster_colours)) {
+    cluster_colours <- cluster_colours[names(cluster_colours) != "lifetime cases"]
+  }
+  
+  # if there are NAs in the clustering assignment, set the last cluster colour
+  # for NA to grey
+  if (any(is.na(cluster_assignments_df$cluster))) {
+    names(cluster_colours)[length(cluster_colours)] <- NA
+    cluster_colours[length(cluster_colours)] <- "grey"
+  }
+  
+  # prepare additional data for margin visualisation
+  col_add_data <- data$imputed_data %>% 
+    right_join(cluster_assignments_df, by = "ID") %>% 
+    filter(.imp == 1) %>% 
+    left_join(data$age, by = "ID") %>% 
+    dplyr::mutate(age = cut(age, breaks = c(18, 25, 40, 55, Inf))) %>% 
+    dplyr::select(ID, age, sex)
+  col_info <- plot_data %>% 
+    dplyr::mutate(# check for NAs in cluster assignment
+      cluster = if_else(cluster == "cluster NA", NA_character_, cluster),
+      medication = if_else(grepl("^F", ID), "mostly not medicated", "mostly medicated")) %>%
+    # 7 of the Optima probands were not medicated at t0 and for 4 we don't have
+    # medication information
+    left_join(col_add_data, by = "ID") %>% 
+    left_join(data$cidi_data, by = "ID") %>% 
+    left_join(data$proband_status, by = "ID") %>% 
+    dplyr::rename(`diagnosis status` = status) %>% 
+    left_join(data$cidi_depression, by = "ID") %>% 
+    dplyr::mutate(`current dep.` = if_else(depression_current, "yes", "no")) %>% 
+    # add the actual medication info (the medication column is just Become/Optima)
+    left_join(data$medication_data, by = "ID") %>% 
+    dplyr::mutate(psychopharmaca = if_else(t0_any_psych_medication, "yes", "no"))
+  
+  diagnosis_status_colours <- c(`current case` = "#1B9E77")
+  if ("control" %in% col_info$`diagnosis status`) {
+    diagnosis_status_colours <- c(diagnosis_status_colours,
+                                  `control` = "#D95F02")
+  }
+  if ("lifetime case" %in% col_info$`diagnosis status`) {
+    diagnosis_status_colours <- c(diagnosis_status_colours,
+                                  `lifetime case` = "#E6AB02")
+  }
+  
+  if (include_controls) {
+    cluster_colours <- c(cluster_colours)
+  }
+  
+  heatmap_ann_colors <- list(
+    `diagnosis status` = diagnosis_status_colours,
+    `current dep.` = c(no = "#FEAF16", yes = "#B00068"),
+    sex = c(male = "#7570B3", female = "#E7298A"),
+    medication = c(`mostly medicated` = "#66A61E", `mostly not medicated` = "#E6AB02"),
+    psychopharmaca = c(yes = "#E41A1C", no = "#377EB8"),
+    cluster = cluster_colours,
+    age = c(`(18,25]` = "#b3d1ff", `(25,40]` = "#66a3ff", `(40,55]` ="#0066ff",
+            `(55,Inf]` = "#0047b3")
+  )
+  
+  if ("previous_cluster" %in% colnames(plot_data)) {
+    col_info <- col_info %>% 
+      dplyr::mutate(`prev. cluster` = previous_cluster,
+                    # check for NAs in cluster assignment
+                    `prev. cluster` = if_else(`prev. cluster` == "cluster NA", NA_character_, `prev. cluster`)) %>% 
+      dplyr::select(cluster, `prev. cluster`, medication, psychopharmaca, age,
+                    sex, `current dep.`, `diagnosis status`)
+    
+    temp_previous_cluster_colours <- previous_cluster_colours[seq_len(length(unique(previous_assignments_df$previous_cluster)))]
+    
+    if (any(is.na(previous_assignments_df$previous_cluster))) {
+      names(temp_previous_cluster_colours)[length(temp_previous_cluster_colours)] <- NA
+      temp_previous_cluster_colours[length(temp_previous_cluster_colours)] <- "grey"
+    }
+    
+    heatmap_ann_colors[["prev. cluster"]] <- temp_previous_cluster_colours
+    
+  } else {
+    col_info <- col_info %>% 
+      dplyr::select(cluster, medication, psychopharmaca, age, sex,
+                    `current dep.`, `diagnosis status`)
+  }
+  
+  if (!show_cases_controls) {
+    col_info <- col_info %>% 
+      dplyr::select(-`diagnosis status`)
+  }
+  
+  if (!is.null(included_annotations)) {
+    col_info <- col_info %>% 
+      dplyr::select(all_of(included_annotations))
+  }
+  
+  col_info <- as.data.frame(col_info)
+  
+  rownames(col_info) <- plot_data$ID
+  
+  pheatmap(heatmap_data,
+           color = colour_palette,
+           cluster_rows = TRUE,
+           cluster_cols = cluster_cols,
+           show_colnames = FALSE,
+           annotation_col = col_info,
+           annotation_colors = heatmap_ann_colors,
+           annotation_legend = annotation_legend,
+           legend = legend,
+           ...)
+  
 }

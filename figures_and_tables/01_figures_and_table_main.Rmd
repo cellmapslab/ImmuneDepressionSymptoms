@@ -27,7 +27,8 @@ source("figures_and_tables/test_functions.R")
 source("figures_and_tables/reporting_functions.R")
 ```
 
-# Data 4 cluster solution age/BMI, cytokines, RNAseq
+# Data
+## Initial clustering
 ```{r}
 general_data <- read_in_general_data(proband_type = "current_cases_new_cidi",
                                      cytokine_version = "additional_correct",
@@ -68,7 +69,7 @@ gsva_go_uncorrected <- readRDS("gsva_go_uncorrected.rds")
 important_genes_initial_clustering <- readRDS("phenotypes_cytokines_rna_4_important_genes.rds")
 ```
 
-# Data 3 cluster solution age/BMI/celltypes, cytokines, RNAseq
+## Secondary analysis: clustering corrected for age/sex/BMI
 ```{r}
 define_cluster_colours_celltypes_v2 <- function() {
   c("reMIDS" = "#94d4b1", "reIDS" = "#b3b3b3",
@@ -82,7 +83,18 @@ res_sumo_3_pheno_cell_cyt_rna <- res_sumo_3_pheno_cell_cyt_rna %>%
   rename(ID = sample, cluster = label)
 ```
 
-# Figure 1
+## Data replication
+```{r}
+data_replication_top10 <- readRDS("data_replication_top10.rds")
+```
+
+## Data Mehta
+```{r}
+pheno_data_mehta <- readRDS("pheno_data_clean.rds")
+```
+
+# Figures
+## Figure 1
 The rest of the figure is designed in Illustrator.
 ```{r}
 bmi_figure_1 <- generate_plot(
@@ -121,7 +133,7 @@ ggsave("../../../paper/figures/figure_1/violinplots_4.pdf",
        scale = 1)
 ```
 
-# Figure 2
+## Figure 2
 Needs to be put together via Illustrator.
 ```{r}
 heatmap_cases_legend_4_sumo_paper <- generate_plot(
@@ -290,7 +302,7 @@ general_data$cytokine_uncorrected %>%
             median_BMI = median(BMI, na.rm = TRUE))
 ```
 
-# Figure 3
+## Figure 3
 Needs to be put together via Illustrator.
 ```{r}
 rel_bmi_crp <- general_data$cytokine_uncorrected %>% 
@@ -421,7 +433,8 @@ lateral_ventricle_4_v1 <- generate_plot(
   ),
   cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
     "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b"),
-  remove_controls = TRUE,
+  remove_controls = FALSE,
+  include_controls = TRUE,
   show_n = FALSE
   ) +
   theme(axis.title.x = element_blank(),
@@ -484,7 +497,7 @@ general_data$cytokine_uncorrected %>%
             p_value = cor.test(age, BMI, use = "pairwise.complete.obs", method = "pearson")$p.value)
 ```
 
-# Figure 4
+## Figure 4
 Needs to be put together via Illustrator.
 ```{r}
 cytokine_boxplots_4 <- generate_plot(
@@ -770,7 +783,7 @@ mean(unlist(mean_rna_corr))
 ```
 
 
-# Figure 5
+## Figure 5
 Alluvial plot between clusters:
 ```{r}
 cluster_colours_celltypes_alluvial_v2 <- c(
@@ -1045,7 +1058,7 @@ ggsave("../../../paper/figures/figure_5/geneset_heatmap_v2.pdf",
 geneset_importance_go_uncorrected_celltypes
 ```
 
-# Figure 6
+## Figure 6
 ```{r}
 vegfa_boxplot_4 <- generate_plot(
   type = "cytokines",
@@ -1136,7 +1149,8 @@ ggsave("../../../paper/figures/figure_6/serpinf1_vegfa_rna_boxplots.pdf",
 
 The UMAPs were generated in python, see the file `01_b_single_cell_figure_6.ipynb`.
 
-# Table 1
+# Tables
+## Table 1
 Generate a table with information about age, sex, BMI, BDI, MDD/dysthymia
 diagnosis, medication.
 
@@ -1180,10 +1194,10 @@ data_sample_table_summary <- data_sample_table %>%
   mutate(age = paste0(round(age_mean, 1), " (", round(age_sd, 1), ")"),
          female = paste0(round(female_fraction * 100, 0), "% (", female_n, ")"),
          BMI = paste0(round(BMI_mean, 1), " (", round(BMI_sd, 1), ")"),
-         `MDD or dysthymia diagnosis` = paste0(round(has_depression_dysthymia_fraction * 100, 0), "% (", has_depression_dysthymia_n, ")"),
+         `major depression or dysthymia diagnosiss` = paste0(round(has_depression_dysthymia_fraction * 100, 0), "% (", has_depression_dysthymia_n, ")"),
          BDI = paste0(round(BDI_total_mean, 1), " (", round(BDI_total_sd, 1), ")"),
          `psychotropic drugs` = paste0(round(t0_any_psych_medication_fraction * 100, 0), "% (", t0_any_psych_medication_n, ")")) %>% 
-  select(status, n, age, female, BMI, `MDD or dysthymia diagnosis`, BDI, `psychotropic drugs`)
+  select(status, n, age, female, BMI, `major depression or dysthymia diagnosiss`, BDI, `psychotropic drugs`)
 
 data_sample_table_summary
 ```
@@ -1193,3 +1207,55 @@ Paste the following into Excel and then into the document as table:
 clipr::write_clip(data_sample_table_summary)
 ```
 
+## Table 2
+
+```{r}
+data_replication_sample_table_summary <- data_replication_top10 %>% 
+  left_join(mdd_diagnosis, by = "ID") %>% 
+  left_join(data_medication_all, by = "ID") %>% 
+  summarise(n = n(),
+            across(c(age, BMI, BDI_total), .fns = list(mean = mean, sd = sd)),
+            across(c(has_depression_dysthymia, any_medication),
+                   .fns = list(fraction = ~sum(.x, na.rm = TRUE) / n(), n = ~sum(.x, na.rm = TRUE))),
+            female_fraction = sum(sex == "female") / n(), female_n = sum(sex == "female")) %>% 
+  mutate(age = paste0(round(age_mean, 1), " (", round(age_sd, 1), ")"),
+         female = paste0(round(female_fraction * 100, 0), "% (", female_n, ")"),
+         BMI = paste0(round(BMI_mean, 1), " (", round(BMI_sd, 1), ")"),
+         `major depression or dysthymia diagnosis` = paste0(round(has_depression_dysthymia_fraction * 100, 0), "% (", has_depression_dysthymia_n, ")"),
+         BDI = paste0(round(BDI_total_mean, 1), " (", round(BDI_total_sd, 1), ")"),
+         `psychotropic drugs` = paste0(round(any_medication_fraction * 100, 0), "% (", any_medication_n, ")")) %>% 
+  select(n, age, female, BMI, `major depression or dysthymia diagnosis`, BDI, `psychotropic drugs`)
+
+data_replication_sample_table_summary
+```
+
+Paste the following into excel and then into the document as table:
+```{r}
+clipr::write_clip(data_replication_sample_table_summary)
+```
+
+## Table 3
+```{r}
+data_mehta_table <- pheno_data_mehta %>% 
+  filter(time_point == "baseline", treatment == "Infliximab") %>% 
+  mutate(BMI = as.numeric(BMI)) %>% 
+  rename(status = group) %>% 
+  group_by(status) %>% 
+  summarise(
+    n = n(),
+    female_fraction = sum(sex == "Female") / n(),
+    female_n = sum(sex == "Female"),
+    BMI_mean = mean(BMI),
+    BMI_sd = sd(BMI)
+  ) %>% 
+  mutate(
+    female = paste0(round(female_fraction * 100, 0), "% (", female_n, ")"),
+    BMI = paste0(round(BMI_mean, 1), " (", round(BMI_sd, 1), ")")
+  ) %>% 
+  select(status, n, female, BMI)
+```
+
+Paste the following into excel and then into the document as table:
+```{r}
+clipr::write_clip(data_mehta_table)
+```
