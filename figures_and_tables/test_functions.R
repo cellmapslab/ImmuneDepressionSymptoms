@@ -27,46 +27,59 @@ generate_test <- function(
 test_BDI_single <- function(
     data,
     cluster_assignments_df,
+    include_controls = FALSE,
     ...
 ) {
-  bdi_data_raw <- data$bdi_data %>% 
-    left_join(cluster_assignments_df, by = "ID")
+  if (include_controls) {
+    # assumes that cluster_assignments_df includes the controls
+    bdi_data_raw <- data$bdi_data %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("lifetime cases"))
+  } else {
+    bdi_data_raw <- data$bdi_data %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("controls", "lifetime cases"))
+  }
+  
   var_name_bdi <- colnames(bdi_data_raw)
   var_name_bdi_index_exclude <- var_name_bdi %in% c("ID", "cluster")
   var_name_bdi <- var_name_bdi[!var_name_bdi_index_exclude]
   
-  bdi_fisher_results <- purrr::set_names(var_name_bdi) %>% 
+  purrr::set_names(var_name_bdi) %>% 
     purrr::map_dfr(function(curr_var_name) {
       data <- table(bdi_data_raw[[curr_var_name]], bdi_data_raw[["cluster"]])
-      if (ncol(data) == 2) {
-        res <- fisher.test(data, simulate.p.value = TRUE)
-        ret <- data.frame(p_value = res[["p.value"]],
-                          estimate = ifelse(is.null(res[["estimate"]]),
-                                            NA, res[["estimate"]]))
-        rownames(ret) <- NULL
-        ret
-      } else {
-        data.frame(p_value = NA, estimate = NA)
-      }
-      
-    }, .id = "disease")
-  
-  bdi_fisher_results %>% 
-    filter(p_value < 0.05) %>% 
-    arrange(p_value)
+      res <- fisher.test(data, simulate.p.value = TRUE)
+      ret <- data.frame(p_value = res[["p.value"]],
+                        estimate = ifelse(is.null(res[["estimate"]]),
+                                          NA, res[["estimate"]]))
+      rownames(ret) <- NULL
+      ret
+    }, .id = "BDI_item")
 }
 
 test_BDI <- function(
     data,
     cluster_assignments_df,
     method = c("conover", "Tukey"),
+    include_controls = FALSE,
     ...
 ) {
-  test_data <- data$bdi_sumscores %>% 
-    group_by(ID) %>% 
-    right_join(cluster_assignments_df, by = "ID") %>% 
-    filter(!cluster %in% c("controls", "lifetime cases")) %>% 
-    mutate(cluster = paste0("cl. ", cluster))
+  if (include_controls) {
+    # this assumes that the cluster_assignments_df already contains the control
+    # IDs
+    test_data <- data$bdi_sumscores %>% 
+      group_by(ID) %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("lifetime cases")) %>% 
+      mutate(cluster = paste0("cl. ", cluster))
+  } else {
+    test_data <- data$bdi_sumscores %>% 
+      group_by(ID) %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("controls", "lifetime cases")) %>% 
+      mutate(cluster = paste0("cl. ", cluster))
+  }
+  
   
   if (method == "conover") {
     conover.test(
@@ -88,13 +101,24 @@ test_MADRS <- function(
     data,
     cluster_assignments_df,
     method = c("conover", "Tukey"),
+    include_controls = FALSE,
     ...
 ) {
-  test_data <- data$madrs %>% 
-    group_by(ID) %>% 
-    right_join(cluster_assignments_df, by = "ID") %>% 
-    filter(!cluster %in% c("controls", "lifetime cases")) %>% 
-    mutate(cluster = paste0("cl. ", cluster))
+  if (include_controls) {
+    # this assumes that the cluster_assignments_df already contains the control
+    # IDs
+    test_data <- data$madrs %>% 
+      group_by(ID) %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("lifetime cases")) %>% 
+      mutate(cluster = paste0("cl. ", cluster))
+  } else {
+    test_data <- data$madrs %>% 
+      group_by(ID) %>% 
+      right_join(cluster_assignments_df, by = "ID") %>% 
+      filter(!cluster %in% c("controls", "lifetime cases")) %>% 
+      mutate(cluster = paste0("cl. ", cluster))
+  }
   
   if (method == "conover") {
     conover.test(
@@ -327,4 +351,19 @@ test_imaging_ancova <- function(
       broom::tidy(res) %>% 
         mutate(imaging_type = variable_type)
     }, .id = "variable")
+}
+
+test_sex <- function(
+    data,
+    cluster_assignments_df,
+    ...
+) {
+  test_data_raw <- data$imputed_data %>% 
+    right_join(cluster_assignments_df, by = "ID") %>% 
+    filter(!cluster %in% c("controls", "lifetime cases")) %>% 
+    filter(.imp == 1)
+  
+  test_data <- with(test_data_raw, table(sex, cluster))
+  print(fisher.test(test_data, simulate.p.value = FALSE))
+  
 }

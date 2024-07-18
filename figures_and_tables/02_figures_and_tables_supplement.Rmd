@@ -63,7 +63,7 @@ important_genes_initial_clustering <- readRDS("phenotypes_cytokines_rna_4_import
 results_4_cluster_final_version <- readRDS("imaging_paper_pheno_cyt_rna_4_cluster.rds")
 ```
 
-## Clustering corrected for age/sex/BMI
+## Secondary analysis: clustering corrected for age/sex/BMI
 ```{r}
 res_sumo_3_cyt_rna_cov <- read.table("04_cytokines_rna_corrected_covariates/01_res_cytokines_rna_corrected_covariates_1_seed_max_iter_10000/k3/clusters.tsv",
                        header = TRUE)
@@ -72,7 +72,7 @@ res_sumo_3_cyt_rna_cov <- res_sumo_3_cyt_rna_cov %>%
   rename(ID = sample, cluster = label)
 ```
 
-## Reclustering with celltypes
+## Exploratory analysis: reclustering with celltypes
 ```{r}
 res_sumo_3_pheno_cell_cyt_rna <- read.table("01_res_phenotypes_celltypes_14_cytokines_rna_seed_max_iter_10000/k3/clusters.tsv",
                        header = TRUE)
@@ -88,14 +88,68 @@ rnaseq_data <- readRDS("rna_filtered_batch_corrected_normalised_featurecounts.rd
 id_match <- readRDS("matched_ids.Rds")
 ```
 
+## Data Mehta
+```{r}
+pheno_data_mehta <- readRDS("pheno_data_clean.rds")
+# DEGs for which we have RNAseq data
+overlapping_genes <- readRDS("deg_baseline_followup_clean_overlapping_with_our_data.rds")
+```
+
+## Data replication
+```{r}
+# read in the replication data as extra data sets because in the general_data
+# these IDs were filtered out
+data_replication_top10 <- readRDS("data_replication_top10.rds")
+data_replication_top10_gene <- readRDS("data_replication_rna_top10.rds")
+
+data_medication_all <- readRDS("psychopharmaca_categories_both.Rds")
+data_somatic_disease_all <- readRDS("somatic_disease_single_items_all.Rds")
+data_somatic_medication_replication <- readRDS("medication_data_become_categories_tanja_replication_sample.rds")
+
+cluster_colors_replication <- function() {
+  c("MIDS" = "#9fe9c0", "HIRDS1" = "#ffe4a5",
+    "LIRDS" = "#b3abeb", "HIRDS2" = "#fcada4")
+}
+```
+
 # Supplementary figures
 ## Figure S1
 Made with Illustrator.
 
 ## Figure S2
-Output directly from SUMO.
+```{r}
+overview_missingness_msd <- missingness_immune_marker %>% 
+  filter(type == "multiplex") %>% 
+  arrange(`percent missing`) %>%
+  correct_cytokine_names(var_name = marker) %>% 
+  mutate(marker = factor(marker, levels = marker)) %>% 
+  ggplot() +
+  aes(
+    x = marker,
+    y = `percent missing`
+  ) +
+  geom_col() +
+  theme_bw() +
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_blank()
+  ) +
+  geom_hline(yintercept = 0.16) +
+  ylab("percent missing values")
+
+overview_missingness_msd
+```
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s2/figure_s2.pdf",
+       plot = overview_missingness_msd,
+       width = 20, height = 15, units = "cm")
+```
 
 ## Figure S3
+Output directly from SUMO.
+
+## Figure S4
 ```{r}
 sex_initial_clustering <- generate_plot(
   type = "sex",
@@ -109,7 +163,7 @@ sex_initial_clustering <- generate_plot(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s3/figure_s3.pdf",
+ggsave("../../../paper/figures/supplements/figure_s4/figure_s4.pdf",
        sex_initial_clustering,
        width = 15,
        height = 10,
@@ -117,8 +171,31 @@ ggsave("../../../paper/figures/supplements/figure_s3/figure_s3.pdf",
 )
 ```
 
+## Figure S5
+```{r}
+medication_somatic_diseases_initial_clustering <- generate_plot(
+  type = "medication_categories_and_somatic_diseases",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  cluster_names = data.frame(
+    cluster = 1:4,
+    cluster_new = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")
+  ),
+  cluster_colours = c("MIDS" = "#3fd482", "HIRDS1" = "#ffca4d",
+    "LIRDS" = "#6857d9", "HIRDS2" = "#fa5c4b")
+)
 
-## Figure S4
+medication_somatic_diseases_initial_clustering
+```
+```{r}
+ggsave("../../../paper_1/figures/supplements/revision/figure_s5/figure_s5.pdf",
+       medication_somatic_diseases_initial_clustering,
+       width = 19,
+       height = 25,
+       units = "cm")
+```
+
+## Figure S6
 ```{r}
 chromosome_distribution_initial_clustering <- generate_plot(
   type = "chromosomes",
@@ -153,14 +230,14 @@ chromosome_distribution_combined <- ggarrange(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s4/figure_s4.pdf",
+ggsave("../../../paper/figures/supplements/figure_s6/figure_s6.pdf",
        chromosome_distribution_combined,
        width = 18,
        height = 15,
        units = "cm")
 ```
 
-## Figure S5
+## Figure S7
 ```{r}
 cidi_initial_clustering <- generate_plot(
   type = "cidi_single",
@@ -183,14 +260,14 @@ cidi_initial_clustering <- generate_plot(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s5/figure_s5.pdf",
+ggsave("../../../paper/figures/supplements/figure_s7/figure_s7.pdf",
        cidi_initial_clustering,
        width = 18,
        height = 18,
        units = "cm")
 ```
 
-## Figure S6
+## Figure S8
 ```{r}
 BDI_sleeping_initial_clustering <- generate_plot(
   type = "BDI_sleeping_new",
@@ -277,14 +354,14 @@ BDI_single_ecg <- ggarrange(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s6/figure_s6.pdf",
+ggsave("../../../paper/figures/supplements/figure_s8/figure_s8.pdf",
        BDI_single_ecg,
        width = 18,
        height = 22,
        units = "cm")
 ```
 
-## Figure S7
+## Figure S9
 ```{r}
 rna_cytokine_age_bmi_correlation <- generate_plot(
   type = "cytokine_RNA_correlation",
@@ -301,14 +378,225 @@ rna_cytokine_age_bmi_correlation <- generate_plot(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s7/figure_s7.pdf",
+ggsave("../../../paper/figures/supplements/figure_s9/figure_s9.pdf",
         rna_cytokine_age_bmi_correlation,
         width = 16,
         height = 15,
         units = "cm")
 ```
 
-## Figure S8
+## Figure S10
+```{r}
+important_genes_hirds <- generate_report(
+  type = "variable_importance",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna %>% filter(cluster %in% c(2, 4)),
+  omic_type = "RNA",
+  rna_version = "standard"
+)
+```
+
+
+```{r}
+rna_heatmap_hirds <- generate_plot(
+  type = "heatmap_rna",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  rna_type = "standard",
+  gene_list = important_genes_hirds %>% slice(1:100) %>% pull(gene),
+  scale_expression = TRUE,
+  colour_palette = colorRampPalette(c("blue", "yellow"))(100),
+  annotation_legend = TRUE,
+  legend = TRUE,
+  show_rownames = FALSE,
+  annotation_names_col = TRUE,
+  treeheight_row = 0,
+  included_annotations = c("cluster"),
+  include_controls = TRUE
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s10/figure_s10.pdf",
+       rna_heatmap_hirds$gtable,
+       width = 18,
+       height = 12,
+       units = "cm")
+```
+
+## Figure S11
+```{r}
+set.seed(54)
+replication_bmi <- data_replication_top10 %>%
+  mutate(`predicted cluster` = case_when(
+    predicted_cluster == "cluster 1" ~ "MIDS",
+    predicted_cluster == "cluster 2" ~ "HIRDS1",
+    predicted_cluster == "cluster 3" ~ "LIRDS",
+    predicted_cluster == "cluster 4" ~ "HIRDS2"
+  ),
+  `predicted cluster` = factor(`predicted cluster`,
+                               levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2"))
+  ) %>% 
+  ggplot(aes(x = `predicted cluster`, y = BMI, fill = `predicted cluster`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, shape = 5) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_fill_manual(values = cluster_colors_replication())
+```
+
+```{r}
+set.seed(54)
+replication_age <- data_replication_top10 %>%
+  mutate(`predicted cluster` = case_when(
+    predicted_cluster == "cluster 1" ~ "MIDS",
+    predicted_cluster == "cluster 2" ~ "HIRDS1",
+    predicted_cluster == "cluster 3" ~ "LIRDS",
+    predicted_cluster == "cluster 4" ~ "HIRDS2"
+  ),
+  `predicted cluster` = factor(`predicted cluster`,
+                               levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2"))
+  ) %>% 
+  ggplot(aes(x = `predicted cluster`, y = age, fill = `predicted cluster`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, shape = 5) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_fill_manual(values = cluster_colors_replication())
+```
+
+```{r}
+set.seed(54)
+replication_bdi <- data_replication_top10 %>%
+  mutate(`predicted cluster` = case_when(
+    predicted_cluster == "cluster 1" ~ "MIDS",
+    predicted_cluster == "cluster 2" ~ "HIRDS1",
+    predicted_cluster == "cluster 3" ~ "LIRDS",
+    predicted_cluster == "cluster 4" ~ "HIRDS2"
+  ),
+  `predicted cluster` = factor(`predicted cluster`,
+                               levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2"))
+  ) %>% 
+  rename(BDI = BDI_total) %>% 
+  ggplot(aes(x = `predicted cluster`, y = BDI, fill = `predicted cluster`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, shape = 5) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  scale_fill_manual(values = cluster_colors_replication())
+```
+
+```{r}
+set.seed(54)
+data_replication_immune_marker <- data_replication_top10 %>%
+  mutate(`predicted cluster` = case_when(
+    predicted_cluster == "cluster 1" ~ "MIDS",
+    predicted_cluster == "cluster 2" ~ "HIRDS1",
+    predicted_cluster == "cluster 3" ~ "LIRDS",
+    predicted_cluster == "cluster 4" ~ "HIRDS2"
+  ),
+  `predicted cluster` = factor(`predicted cluster`,
+                               levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2"))
+  ) %>%
+  pivot_longer(
+    cols = c(IL_1RA, hsCRP, PlGF, MCP_1, TNF_alpha, MIP_1beta, MCP_4),
+    names_to = "immune marker",
+    values_to = "normalized concentration"
+  )
+data_replication_immune_marker <- correct_cytokine_names(
+  data_replication_immune_marker, var_name = `immune marker`
+)
+data_replication_immune_marker <- data_replication_immune_marker %>% 
+  mutate(`immune marker` = if_else(`immune marker` == "hsCRP", "CRP", `immune marker`),
+         `immune marker` = factor(`immune marker`, levels = c("IL-1RA", "CRP",
+                                                              "PlGF", "CCL2",
+                                                              "TNF", "CCL4", "CCL13")))
+replication_immune_marker <- data_replication_immune_marker %>% 
+  ggplot(aes(x = `predicted cluster`, y = `normalized concentration`, fill = `predicted cluster`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, shape = 5) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "#339999")) +
+  scale_fill_manual(values = cluster_colors_replication()) +
+  facet_wrap(~`immune marker`, ncol = 4) +
+  ylab("Normalized immune marker concentration")
+```
+
+```{r}
+set.seed(54)
+replication_rna <- data_replication_top10_gene %>%
+  mutate(`predicted cluster` = case_when(
+    predicted_cluster == "cluster 1" ~ "MIDS",
+    predicted_cluster == "cluster 2" ~ "HIRDS1",
+    predicted_cluster == "cluster 3" ~ "LIRDS",
+    predicted_cluster == "cluster 4" ~ "HIRDS2"
+  ),
+  `predicted cluster` = factor(`predicted cluster`,
+                               levels = c("MIDS", "HIRDS1", "LIRDS", "HIRDS2")),
+  external_gene_name = factor(external_gene_name, levels = c("NRCAM", "NAP1L2",
+                                                             "FBLN2", "PXYLP1",
+                                                             "SH3RF3", "EDA",
+                                                             "XKRX"))
+  ) %>%
+  ggplot(aes(x = `predicted cluster`, y = `expression`, fill = `predicted cluster`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, shape = 5) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "#99cc33")) +
+  scale_fill_manual(values = cluster_colors_replication()) +
+  facet_wrap(~external_gene_name, ncol = 4) +
+  ylab("Normalized expression")
+```
+
+```{r}
+replication_bmi_age_bdi <- ggarrange(
+  replication_bmi, replication_age, replication_bdi,
+  ncol = 3,
+  common.legend = TRUE,
+  legend = "bottom",
+  labels = "AUTO"
+)
+
+replication_immune_marker_rna <- ggarrange(
+  replication_immune_marker, replication_rna,
+  ncol = 2,
+  labels = c("D", "E")
+)
+
+replication_all <- ggarrange(
+  replication_bmi_age_bdi,
+  replication_immune_marker_rna,
+  ncol = 1
+)
+```
+
+```{r}
+ggsave("../../../paper/figures/supplements/figure_s11/figure_s11.pdf",
+       replication_all,
+       width = 18,
+       height = 18,
+       units = "cm")
+```
+
+## Figure S12
 Needs to be put together via Illustrator.
 Alluvial plot to show how the cluster assignments change:
 ```{r}
@@ -373,7 +661,7 @@ plot_alluvial_uncorrected_corrected <- data_alluvial %>%
 plot_alluvial_uncorrected_corrected
 ```
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/alluvial.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/alluvial.pdf",
        plot_alluvial_uncorrected_corrected,
        width = 7,
        height = 7,
@@ -408,7 +696,7 @@ variable_importance_cytokines_rna_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/variable_importance.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/variable_importance.pdf",
        variable_importance_cytokines_rna_corrected,
        width = 12,
        height = 7,
@@ -446,7 +734,7 @@ cytokine_boxplots_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/cytokine_distribution.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/cytokine_distribution.pdf",
        cytokine_boxplots_corrected,
        width = 9,
        height = 7,
@@ -483,7 +771,7 @@ genes_boxplot_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/gene_distribution.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/gene_distribution.pdf",
        genes_boxplot_corrected,
        width = 9,
        height = 7,
@@ -512,7 +800,7 @@ bdi_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/bdi.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/bdi.pdf",
        bdi_corrected,
        width = 5.5,
        height = 7,
@@ -541,7 +829,7 @@ age_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/age.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/age.pdf",
        age_corrected,
        width = 5.5,
        height = 7,
@@ -571,14 +859,14 @@ bmi_corrected
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s8/bmi.pdf",
+ggsave("../../../paper/figures/supplements/figure_s12/bmi.pdf",
        bmi_corrected,
        width = 5.5,
        height = 7,
        units = "cm")
 ```
 
-## Figure S9
+## Figure S13
 ```{r}
 age_reclustering <- generate_plot(
   type = "age",
@@ -655,14 +943,14 @@ age_bmi_bdi_reclustering <- ggarrange(
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s9/figure_s9.pdf",
+ggsave("../../../paper/figures/supplements/figure_s13/figure_s13.pdf",
        age_bmi_bdi_reclustering,
        width = 18,
        height = 12,
        units = "cm")
 ```
 
-## Figure S10
+## Figure S14
 Match the genes to the immune marker:
 ```{r}
 cytokine_names <- data.frame(
@@ -799,7 +1087,7 @@ rna_cytokine_correlation_all
 ```
 
 ```{r}
-ggsave("../../../paper/figures/supplements/figure_s10/figure_s10.pdf",
+ggsave("../../../paper/figures/supplements/figure_s14/figure_s14.pdf",
        rna_cytokine_correlation_all,
        width = 18,
        height = 15,
@@ -819,7 +1107,18 @@ id_data_with_status <- bind_rows(
 
 # medication information
 medication_become_info <- general_data$medication_become_categories %>% 
-  right_join(id_data_with_status, by = "ID")
+  right_join(id_data_with_status, by = "ID") %>% 
+  # add oral corticosteroid info
+  mutate(oral_corticosteroids = case_when(
+    is.na(cardiac_med) ~ NA_integer_,
+    ID %in% oral_corticosteroids$ID ~ 1L,
+    TRUE ~ 0L
+  )) %>% 
+  relocate(oral_corticosteroids, .before = status) %>% 
+  # add info about replication
+  bind_rows(
+    data_somatic_medication_replication %>% mutate(status = "replication")
+  )
 
 # determine the available data
 medication_become_info %>% 
@@ -838,9 +1137,9 @@ medication_become_info_summary <- medication_become_info %>%
   select(-c(antiepileptics, herbal_psychotropics)) %>% 
   group_by(status) %>% 
   summarise(
-    across(thyroid_med:nutr_suppl, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
-    across(thyroid_med:nutr_suppl, ~sum(.x == 1), .names = "{.col}-n"),
-    across(thyroid_med:nutr_suppl, ~sum(.x == 1) / n() * 100, .names = "{.col}-perc")
+    across(thyroid_med:oral_corticosteroids, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
+    across(thyroid_med:oral_corticosteroids, ~sum(.x == 1), .names = "{.col}-n"),
+    across(thyroid_med:oral_corticosteroids, ~sum(.x == 1) / n() * 100, .names = "{.col}-perc")
             )
 
 medication_become_info_summary_long <- medication_become_info_summary %>% 
@@ -851,8 +1150,13 @@ medication_become_info_summary_long <- medication_become_info_summary %>%
   )
 
 # somatic disease info
-somatic_diseases_info <- general_data$somatic_data_single %>% 
-  right_join(id_data_with_status, by = "ID")
+id_data_with_status_replication <- bind_rows(
+  id_data_with_status,
+  data_replication_top10 %>% select(ID) %>% mutate(status = "replication")
+)
+somatic_diseases_info <- data_somatic_disease_all %>% 
+  left_join(other_autoimmune_diseases, by = "ID") %>% 
+  right_join(id_data_with_status_replication, by = "ID")
 
 # determine the available data
 somatic_diseases_info %>% 
@@ -874,8 +1178,8 @@ somatic_diseases_info_summary <- somatic_diseases_info %>%
   rename_with(~str_replace(.x, "^msp_", ""), .cols = starts_with("msp")) %>% 
   group_by(status) %>% 
   summarise(
-    across(diabetes:neurodermatitis, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
-    across(diabetes:neurodermatitis, function(x) {sum(x == 1, na.rm = TRUE)},
+    across(diabetes:other_autoimmune_disease, ~sum(!is.na(.x)), .names = "{.col}-n_available"),
+    across(diabetes:other_autoimmune_disease, function(x) {sum(x == 1, na.rm = TRUE)},
            .names = "{.col}-n")
             )
 
@@ -902,27 +1206,83 @@ somatic_diseases_medication_info <- bind_rows(
   
 ```
 
-
 ## Table S2
 ```{r}
-# look only at missingness in sample used for clustering
-missingness_cytokines <- general_data$cytokine_uncorrected %>% 
-  right_join(res_sumo_4_pheno_cyt_rna %>% select(ID), by = "ID") %>% 
-  select(ID, BMI, bFGF:sIL_6R) %>% 
-  pivot_longer(
-    cols = -ID,
-    names_to = "variable"
-  ) %>% 
-  group_by(variable) %>% 
-  summarise(
-    `n missing` = sum(is.na(value)),
-    `percent missing` = `n missing` / n() * 100
+id_data_with_cohort_replication <- id_data_with_status_replication %>% 
+  filter(status != "control") %>% 
+  mutate(cohort = if_else(str_detect(ID, "^F"), "BeCOME", "OPTIMA")) %>% 
+  select(-status)
+
+phenotype_data_clustering_replication <- general_data$bdi_sumscores %>% select(ID, BDI_total) %>% 
+  left_join(sex_data, by = "ID") %>% 
+  select(ID, BDI_total, sex) %>% 
+  bind_rows(
+    data_replication_top10 %>% 
+  select(ID, BDI_total, sex)
   )
 
-missingness_cytokines <- correct_cytokine_names(missingness_cytokines, variable)
+number_somatic_diseases <- somatic_diseases_info %>% 
+  rowwise() %>% 
+  mutate(
+    n_na = sum(is.na(c_across(starts_with("msp")))),
+    sum_disease = sum(c_across(starts_with("msp")), na.rm = TRUE),
+    # set sum_disease to NA for all participants for which all entries are NA
+    # -> we don't have the disease info for them; whereas other participants
+    # have NAs only for a few diseases
+    sum_disease = if_else(n_na == 36, NA_real_, sum_disease)
+  ) %>% 
+  rename(`n somatic diseases` = sum_disease)
+
+data_sample_table_cohorts <- general_data$age %>% 
+  right_join(id_data_with_cohort_replication, by = "ID") %>% 
+  left_join(phenotype_data_clustering_replication, by = "ID") %>% 
+  left_join(bmi_data, by = "ID") %>% 
+  left_join(mdd_diagnosis, by = "ID") %>% 
+  left_join(data_medication_all, by = "ID") %>% 
+  left_join(number_somatic_diseases, by = "ID")
+
+data_sample_table_cohorts_summary <- data_sample_table_cohorts %>% 
+  group_by(cohort) %>% 
+  summarise(n = n(),
+            across(c(age, BMI, BDI_total, `n somatic diseases`), .fns = list(mean = mean, sd = sd),
+                   na.rm = TRUE),
+            across(c(has_depression_dysthymia, any_medication),
+                   .fns = list(fraction = ~sum(.x, na.rm = TRUE) / n(), n = ~sum(.x, na.rm = TRUE))),
+            female_fraction = sum(sex == "female") / n(), female_n = sum(sex == "female")) %>% 
+  mutate(age = paste0(round(age_mean, 1), " (", round(age_sd, 1), ")"),
+         female = paste0(round(female_fraction * 100, 0), "% (", female_n, ")"),
+         BMI = paste0(round(BMI_mean, 1), " (", round(BMI_sd, 1), ")"),
+         `MDD or dysthymia diagnosis` = paste0(round(has_depression_dysthymia_fraction * 100, 0), "% (", has_depression_dysthymia_n, ")"),
+         BDI = paste0(round(BDI_total_mean, 1), " (", round(BDI_total_sd, 1), ")"),
+         `psychotropic drugs` = paste0(round(any_medication_fraction * 100, 0), "% (", any_medication_n, ")"),
+         `n somatic diseases` = paste0(round(`n somatic diseases_mean`, 1), " (", round(`n somatic diseases_sd`, 1), ")")) %>% 
+  select(cohort, n, age, female, BMI, `MDD or dysthymia diagnosis`, BDI, `psychotropic drugs`, `n somatic diseases`)
 ```
 
+
 ## Table S3
+```{r}
+# look at missingness in sample used for clustering and controls and coefficients
+# of variation
+qc_cytokines <- missingness_immune_marker %>% 
+  full_join(cv_immune_marker, by = c("marker", "type"))
+
+qc_cytokines <- qc_cytokines %>% 
+  mutate(
+    `used in analysis` = if_else(
+      marker %in% c("CRP", "GM-CSF", "IL-13", "IL-17A-GenB", "IL-17A/F",
+                    "IL-17C", "IL-17D", "IL-1beta", "IL-21", "IL-22", "IL-23",
+                    "IL-3", "IL-4", "IL-6", "IL-8 LS", "IL-9", "MIP-3alpha",
+                    "VEGF-A LS") &
+        type == "multiplex",
+      "no", "yes"
+    )
+  ) %>% 
+  correct_cytokine_names(var_name = marker) %>% 
+  arrange(type, marker)
+```
+
+## Table S4
 ```{r}
 study_by_cluster <- bind_rows(
   res_sumo_4_pheno_cyt_rna %>% 
@@ -1067,7 +1427,7 @@ study_by_cluster <- study_by_cluster %>%
 ```
 
 
-## Table S4
+## Table S5
 ```{r}
 variable_importance_initial_clustering <- generate_report(
   type = "variable_importance_cytokines_rna",
@@ -1085,7 +1445,7 @@ variable_importance_initial_clustering <- variable_importance_initial_clustering
   select(rank, variable, `variable importance` = F_value)
 ```
 
-## Table S5
+## Table S6
 ```{r}
 # use the GRCh38 by ENSEMBL data
 gene_location_info <- data.frame(
@@ -1107,23 +1467,43 @@ gene_location_info <- data.frame(
   arrange(`gene name`)
 ```
 
-## Table S6
+## Table S7
+```{r}
+test_single_bdi_items <- generate_test(
+  type = "BDI_single",
+  general_data = general_data,
+  cluster_assignments = res_sumo_4_pheno_cyt_rna,
+  include_controls = FALSE
+) %>% 
+  mutate(
+    p_value_adjusted = p.adjust(p_value, method = "BH")
+  ) %>% 
+  arrange(p_value_adjusted) %>% 
+  select(-estimate) %>% 
+  rename(`BDI item` = BDI_item,
+         `p value` = p_value,
+         `p value adjusted` = p_value_adjusted)
+```
+
+
+## Table S8
 Data from imaging analysis:
 ```{r}
 imaging_table_1 <- tibble::tibble(
   `Volume phenotype` = c("", "Total BV", "Total GM", "Total WM"),
-  `F-value` = c("", 2.406, 1.869, 2.059),
-  `p-value` = c("", 0.070, 0.137, 0.108),
-  MIDS = c("Adjusted mean (SEM)", "1207.8 (4.5)", "689.3 (3.4)", "518.5 (3.3)"),
-  HIRDS1 = c("Adjusted mean (SEM)", "1210.7 (6.7)", "684.9 (5.1)", "525.8 (5.0)"),
-  LIRDS = c("Adjusted mean (SEM)", "1229.1 (8.9)", "703.1 (6.8)", "526.0 (6.7)"),
-  HIRDS2 = c("Adjusted mean (SEM)", "1197.5 (12.0)", "692.3 (9.1)", "505.1 (9.0)"),
-  `Pair-wise comparisons` = c("", "LIRDS > MIDS+, LIRDS > HIRDS1+, LIRDS > HIRDS2*", "LIRDS > HIRDS1*", "LIRDS > HIRDS2*, HIRDS1 > HIRDS2*")
+  `F-value` = c("", 1.868, 2.378, 2.186),
+  `p-value` = c("", 0.133, 0.054, 0.073),
+  `MIDS (N=89)` = c("Adjusted mean (SEM)", "1212.9 (4.1)", "693.3 (3.2)", "519.7 (3.0)"),
+  `HIRDS1 (N=30)` = c("Adjusted mean (SEM)", "1213.7 (6.5)", "687.1 (5.0)", "526.6 (4.8)"),
+  `LIRDS (N=20)` = c("Adjusted mean (SEM)", "1232.5 (8.5)", "705.3 (6.6)", "527.1 (6.3)"),
+  `HIRDS2 (N=10)` = c("Adjusted mean (SEM)", "1201.1 (11.5)", "694.8 (9.0)", "506.4 (8.5)"),
+  `Controls (N=29)` = c("Adjusted mean (SEM)", "1211.9 (6.2)", "683.3 (4.8)", "528.5 (4.6)"),
+  `Pair-wise comparisons` = c("", "LIRDS > Controls+, LIRDS > MIDS+, LIRDS > HIRDS1+, LIRDS > HIRDS2*", "LIRDS > HIRDS1*, LIRDS > Controls*, Controls > MIDS*", "Controls > MIDS+, HIRDS1 > HIRDS2*, LIRDS > HIRDS2*, Controls > HIRDS2*")
 )
 ```
 
 
-## Table S7
+## Table S9
 ```{r}
 pretty_imaging_names <- data.frame(`FreeSurver phenotype` = c("Left medial orbitofrontal cortex",
                                                               "Right medial orbitofrontal cortex",
@@ -1174,7 +1554,7 @@ imaging_table_2 <- pretty_imaging_names %>%
 ```
 
 
-## Table S8
+## Table S10
 ```{r}
 gsva_go_clean_uncorrected <- as.data.frame(t(gsva_go_uncorrected))
 gsva_go_clean_uncorrected$ID <- rownames(gsva_go_clean_uncorrected)
@@ -1194,7 +1574,7 @@ geneset_importance_initial_clustering <- geneset_importance_initial_clustering %
   select(rank, geneset, `variable importance` = F_value)
 ```
 
-## Table S9
+## Table S11
 ```{r}
 variable_importance_corrected_clustering <- generate_report(
   type = "variable_importance_cytokines_rna",
@@ -1212,7 +1592,7 @@ variable_importance_corrected_clustering <- variable_importance_corrected_cluste
   select(rank, variable, `variable importance` = F_value)
 ```
 
-## Table S10
+## Table S12
 ```{r}
 variable_importance_reclustering <- generate_report(
   type = "variable_importance_cytokines_rna",
@@ -1230,7 +1610,7 @@ variable_importance_reclustering <- variable_importance_reclustering %>%
   select(rank, variable, `variable importance` = F_value)
 ```
 
-## Table S11
+## Table S13
 ```{r}
 geneset_importance_reclustering <- generate_report(
   type = "variable_importance",
@@ -1250,20 +1630,28 @@ geneset_importance_reclustering <- geneset_importance_reclustering %>%
 ```{r}
 tables_list <- list(
   "Table S1" = somatic_diseases_medication_info,
-  "Table S2" = missingness_cytokines,
-  "Table S3" = study_by_cluster,
-  "Table S4" = variable_importance_initial_clustering,
-  "Table S5" = gene_location_info,
-  "Table S6" = imaging_table_1,
-  "Table S7" = imaging_table_2,
-  "Table S8" = geneset_importance_initial_clustering,
-  "Table S9" = variable_importance_corrected_clustering,
-  "Table S10" = variable_importance_reclustering,
-  "Table S11" = geneset_importance_reclustering
+  "Table S2" = data_sample_table_cohorts_summary,
+  "Table S3" = qc_cytokines,
+  "Table S4" = study_by_cluster,
+  "Table S5" = variable_importance_initial_clustering,
+  "Table S6" = gene_location_info,
+  "Table S7" = test_single_bdi_items,
+  "Table S8" = imaging_table_1,
+  "Table S9" = imaging_table_2,
+  "Table S10" = geneset_importance_initial_clustering,
+  "Table S11" = variable_importance_corrected_clustering,
+  "Table S12" = variable_importance_reclustering,
+  "Table S13" = geneset_importance_reclustering
 )
 
 hs <- createStyle(textDecoration = "Bold")
 
-write.xlsx(tables_list, "../../../paper/tables/supplemental_tables.xlsx",
+wb <- write.xlsx(tables_list, "../../../paper/tables/supplemental_tables.xlsx",
            headerStyle = hs)
+
+# adjust number of decimal points for S9
+addStyle(wb, sheet = 9, style = createStyle(numFmt = "0.000"),
+         rows = 2:17, cols = 2:4, gridExpand = TRUE)
+saveWorkbook(wb, "../../../paper/tables/supplemental_tables.xlsx",
+             overwrite = TRUE)
 ```
